@@ -229,17 +229,37 @@ class NightLightManager:
             brightness, kelvin = self.params_for(entity_id, night=True)
             await self._async_process_light(entity_id, brightness, kelvin)
 
+    @staticmethod
+    def _to_pct(brightness_byte: int) -> int:
+        """Convert HA brightness (0-255) to percent."""
+        return round(brightness_byte * 100 / 255)
+
+    @staticmethod
+    def _to_byte(brightness_pct: int | float) -> int:
+        """Convert percent (1-100) to HA brightness (1-255)."""
+        return min(255, max(1, round(brightness_pct * 255 / 100)))
+
+    def _supports_color_temp(self, state: State) -> bool:
+        """Return True if the light supports color temperature."""
+        modes = state.attributes.get("supported_color_modes")
+        if not modes:  # 未上报时乐观假定支持，避免漏发色温
+            return True
+        return "color_temp" in modes
+
     def _matches(self, state: State, brightness: int, kelvin: int) -> bool:
-        """Return True if the light already matches target within tolerance."""
+        """Return True if the light already matches target within tolerance.
+
+        brightness 参数为百分比（1-100）。
+        """
         if state.state != STATE_ON:
             return False
         cur_brightness = state.attributes.get(ATTR_BRIGHTNESS)
         cur_kelvin = state.attributes.get(ATTR_COLOR_TEMP_KELVIN)
         if cur_brightness is None:
             return False
-        if abs(cur_brightness - brightness) > self.tol_brightness:
+        if abs(self._to_pct(cur_brightness) - brightness) > self.tol_brightness:
             return False
-        # 灯具不支持色温模式时 kelvin 可能为 None，仅校验亮度
+        # 灯具不支持/未上报色温时仅校验亮度
         if cur_kelvin is not None and abs(cur_kelvin - kelvin) > self.tol_kelvin:
             return False
         return True
@@ -272,12 +292,12 @@ class NightLightManager:
         machine.target = (brightness, kelvin)
         service_data = {
             ATTR_ENTITY_ID: entity_id,
-            ATTR_BRIGHTNESS: brightness,
+            ATTR_BRIGHTNESS: self._to_byte(brightness),
         }
-        if ATTR_COLOR_TEMP_KELVIN in state.attributes or state.state != STATE_ON:
+        if self._supports_color_temp(state):
             service_data[ATTR_COLOR_TEMP_KELVIN] = kelvin
         _LOGGER.info(
-            "%s mismatch (brightness=%s kelvin=%s), setting to %s/%sK",
+            "%s mismatch (brightness=%s kelvin=%s), setting to %s%%/%sK",
             entity_id,
             state.attributes.get(ATTR_BRIGHTNESS),
             state.attributes.get(ATTR_COLOR_TEMP_KELVIN),

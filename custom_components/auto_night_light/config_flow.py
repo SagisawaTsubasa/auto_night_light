@@ -87,7 +87,10 @@ def _settings_schema(defaults: dict) -> vol.Schema:
             vol.Required(
                 CONF_BRIGHTNESS, default=defaults.get(CONF_BRIGHTNESS, DEFAULT_BRIGHTNESS)
             ): NumberSelector(
-                NumberSelectorConfig(min=1, max=255, mode=NumberSelectorMode.SLIDER)
+                NumberSelectorConfig(
+                    min=1, max=100, unit_of_measurement="%",
+                    mode=NumberSelectorMode.SLIDER,
+                )
             ),
             vol.Required(
                 CONF_COLOR_TEMP_KELVIN,
@@ -102,7 +105,10 @@ def _settings_schema(defaults: dict) -> vol.Schema:
                 CONF_TOLERANCE_BRIGHTNESS,
                 default=defaults.get(CONF_TOLERANCE_BRIGHTNESS, DEFAULT_TOLERANCE_BRIGHTNESS),
             ): NumberSelector(
-                NumberSelectorConfig(min=0, max=64, mode=NumberSelectorMode.SLIDER)
+                NumberSelectorConfig(
+                    min=0, max=25, unit_of_measurement="%",
+                    mode=NumberSelectorMode.SLIDER,
+                )
             ),
             vol.Required(
                 CONF_TOLERANCE_KELVIN,
@@ -132,7 +138,10 @@ def _settings_schema(defaults: dict) -> vol.Schema:
                 CONF_DAY_BRIGHTNESS,
                 default=defaults.get(CONF_DAY_BRIGHTNESS, DEFAULT_DAY_BRIGHTNESS),
             ): NumberSelector(
-                NumberSelectorConfig(min=1, max=255, mode=NumberSelectorMode.SLIDER)
+                NumberSelectorConfig(
+                    min=1, max=100, unit_of_measurement="%",
+                    mode=NumberSelectorMode.SLIDER,
+                )
             ),
             vol.Required(
                 CONF_DAY_COLOR_TEMP_KELVIN,
@@ -178,11 +187,17 @@ def _override_schema(global_settings: dict, current: dict | None) -> vol.Schema:
         {
             vol.Required(OVR_ENABLE, default=enabled): BooleanSelector(),
             vol.Required(OVR_BRIGHTNESS, default=b): NumberSelector(
-                NumberSelectorConfig(min=1, max=255, mode=NumberSelectorMode.SLIDER)
+                NumberSelectorConfig(
+                    min=1, max=100, unit_of_measurement="%",
+                    mode=NumberSelectorMode.SLIDER,
+                )
             ),
             k_marker: k_sel,
             vol.Required(OVR_DAY_BRIGHTNESS, default=db): NumberSelector(
-                NumberSelectorConfig(min=1, max=255, mode=NumberSelectorMode.SLIDER)
+                NumberSelectorConfig(
+                    min=1, max=100, unit_of_measurement="%",
+                    mode=NumberSelectorMode.SLIDER,
+                )
             ),
             dk_marker: dk_sel,
         }
@@ -221,7 +236,7 @@ async def _per_light_step(flow, user_input, finish):
 class AutoNightLightConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle the initial config flow."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         """Store intermediate data between steps."""

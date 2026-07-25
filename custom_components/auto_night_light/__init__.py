@@ -7,10 +7,49 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 
-from .const import DOMAIN, SERVICE_TRIGGER_NOW
+from .const import (
+    CONF_BRIGHTNESS,
+    CONF_DAY_BRIGHTNESS,
+    CONF_OVERRIDES,
+    CONF_TOLERANCE_BRIGHTNESS,
+    DOMAIN,
+    OVR_BRIGHTNESS,
+    OVR_DAY_BRIGHTNESS,
+    SERVICE_TRIGGER_NOW,
+)
 from .manager import NightLightManager
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _pct(v) -> int:
+    """Convert a legacy 1-255 value to percent; leave small values untouched."""
+    if isinstance(v, (int, float)) and v > 100:
+        return max(1, round(v / 255 * 100))
+    return v
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate v1 (brightness 1-255) to v2 (brightness 1-100%)."""
+    if entry.version >= 2:
+        return True
+    _LOGGER.info("Migrating auto night light entry to v2 (brightness percent)")
+    data = dict(entry.data)
+    options = dict(entry.options)
+    for store in (data, options):
+        for key in (CONF_BRIGHTNESS, CONF_DAY_BRIGHTNESS):
+            if key in store:
+                store[key] = _pct(store[key])
+        if CONF_TOLERANCE_BRIGHTNESS in store:
+            store[CONF_TOLERANCE_BRIGHTNESS] = _pct(store[CONF_TOLERANCE_BRIGHTNESS])
+        for ovr in store.get(CONF_OVERRIDES, {}).values():
+            for key in (OVR_BRIGHTNESS, OVR_DAY_BRIGHTNESS):
+                if key in ovr:
+                    ovr[key] = _pct(ovr[key])
+    hass.config_entries.async_update_entry(
+        entry, data=data, options=options, version=2
+    )
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
