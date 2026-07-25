@@ -115,6 +115,11 @@ class NightLightManager:
             CONF_DAY_COLOR_TEMP_KELVIN, DEFAULT_DAY_COLOR_TEMP_KELVIN
         )
         self.overrides: dict[str, dict] = data.get(CONF_OVERRIDES, {})
+        self.machines: dict[str, LightMachine] = {
+            light: LightMachine(entity_id=light) for light in self.lights
+        }
+        self._unsub_time = None
+        self._unsub_state = None
 
     def params_for(self, entity_id: str, night: bool) -> tuple[int, int]:
         """Resolve effective (brightness, kelvin) for a light, applying overrides."""
@@ -128,11 +133,6 @@ class NightLightManager:
             ovr.get(OVR_DAY_BRIGHTNESS, self.day_brightness),
             ovr.get(OVR_DAY_COLOR_TEMP_KELVIN, self.day_kelvin),
         )
-        self.machines: dict[str, LightMachine] = {
-            light: LightMachine(entity_id=light) for light in self.lights
-        }
-        self._unsub_time = None
-        self._unsub_state = None
 
     def start(self) -> None:
         """Schedule the daily trigger and the turn-on listener."""
@@ -200,7 +200,10 @@ class NightLightManager:
                 entity_id,
             )
             return
-        machine = self.machines[entity_id]
+        machine = self.machines.get(entity_id)
+        if machine is None:
+            _LOGGER.debug("%s not in machine table (stale listener?), skipped", entity_id)
+            return
         machine.state = LightState.TURN_ON_PENDING
         _LOGGER.info(
             "%s turned on (%s mode), checking after %.1fs settle delay",
