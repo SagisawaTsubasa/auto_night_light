@@ -1,0 +1,64 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Select lights",
+        "data": {
+          "lights": "Light entities"
+        }
+      },
+      "settings": {
+        "title": "Night light settings",
+        "data": {
+          "trigger_time": "Daily trigger time",
+          "brightness": "Target brightness (1-255)",
+          "color_temp_kelvin": "Target color temperature",
+          "tolerance_brightness": "Brightness tolerance",
+          "tolerance_kelvin": "Color temperature tolerance",
+          "verify_delay": "Verify delay after control",
+          "only_when_on": "Only adjust lights that are already on",
+          "end_time": "Night window end time",
+          "turn_on_listen": "Apply settings when a light turns on at night",
+          "settle_delay": "Settle delay after turn-on",
+          "day_enabled": "Apply daytime settings outside night window",
+          "day_brightness": "Daytime brightness (1-255)",
+          "day_color_temp_kelvin": "Daytime color temperature"
+        }
+      }
+    },
+    "error": {
+      "no_lights": "Please select at least one light"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Select lights",
+        "data": {
+          "lights": "Light entities"
+        }
+      },
+      "settings": {
+        "title": "Night light settings",
+        "data": {
+          "trigger_time": "Daily trigger time",
+          "brightness": "Target brightness (1-255)",
+          "color_temp_kelvin": "Target color temperature",
+          "tolerance_brightness": "Brightness tolerance",
+          "tolerance_kelvin": "Color temperature tolerance",
+          "verify_delay": "Verify delay after control",
+          "only_when_on": "Only adjust lights that are already on",
+          "end_time": "Night window end time",
+          "turn_on_listen": "Apply settings when a light turns on at night",
+          "settle_delay": "Settle delay after turn-on",
+          "day_enabled": "Apply daytime settings outside night window",
+          "day_brightness": "Daytime brightness (1-255)",
+          "day_color_temp_kelvin": "Daytime color temperature"
+        }
+      }
+    },
+    "error": {
+      "no_lights": "Please select at least one light"
+    }
+  }
+}

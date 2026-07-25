@@ -1,0 +1,64 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "选择灯具",
+        "data": {
+          "lights": "灯具实体"
+        }
+      },
+      "settings": {
+        "title": "夜灯参数",
+        "data": {
+          "trigger_time": "每日触发时间",
+          "brightness": "目标亮度（1-255）",
+          "color_temp_kelvin": "目标色温",
+          "tolerance_brightness": "亮度容差",
+          "tolerance_kelvin": "色温容差",
+          "verify_delay": "控制后验证延迟",
+          "only_when_on": "仅调整已开启的灯",
+          "end_time": "夜间时段结束时间",
+          "turn_on_listen": "夜间开灯时自动应用夜灯参数",
+          "settle_delay": "开灯后稳定延迟",
+          "day_enabled": "时段外开灯应用日间参数",
+          "day_brightness": "日间亮度（1-255）",
+          "day_color_temp_kelvin": "日间色温"
+        }
+      }
+    },
+    "error": {
+      "no_lights": "请至少选择一盏灯"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "选择灯具",
+        "data": {
+          "lights": "灯具实体"
+        }
+      },
+      "settings": {
+        "title": "夜灯参数",
+        "data": {
+          "trigger_time": "每日触发时间",
+          "brightness": "目标亮度（1-255）",
+          "color_temp_kelvin": "目标色温",
+          "tolerance_brightness": "亮度容差",
+          "tolerance_kelvin": "色温容差",
+          "verify_delay": "控制后验证延迟",
+          "only_when_on": "仅调整已开启的灯",
+          "end_time": "夜间时段结束时间",
+          "turn_on_listen": "夜间开灯时自动应用夜灯参数",
+          "settle_delay": "开灯后稳定延迟",
+          "day_enabled": "时段外开灯应用日间参数",
+          "day_brightness": "日间亮度（1-255）",
+          "day_color_temp_kelvin": "日间色温"
+        }
+      }
+    },
+    "error": {
+      "no_lights": "请至少选择一盏灯"
+    }
+  }
+}

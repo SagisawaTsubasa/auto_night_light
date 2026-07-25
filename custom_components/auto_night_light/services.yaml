@@ -1,0 +1,3 @@
+trigger_now:
+  name: Trigger now
+  description: Immediately run one check-and-set round for all configured entries.
