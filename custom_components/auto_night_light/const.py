@@ -16,6 +16,13 @@ CONF_SETTLE_DELAY = "settle_delay"
 CONF_DAY_ENABLED = "day_enabled"
 CONF_DAY_BRIGHTNESS = "day_brightness"
 CONF_DAY_COLOR_TEMP_KELVIN = "day_color_temp_kelvin"
+CONF_OVERRIDES = "overrides"
+
+# 逐灯覆盖的子键
+OVR_BRIGHTNESS = "brightness"
+OVR_COLOR_TEMP_KELVIN = "color_temp_kelvin"
+OVR_DAY_BRIGHTNESS = "day_brightness"
+OVR_DAY_COLOR_TEMP_KELVIN = "day_color_temp_kelvin"
 
 DEFAULT_BRIGHTNESS = 64
 DEFAULT_COLOR_TEMP_KELVIN = 2200

@@ -24,6 +24,17 @@
           "day_brightness": "日间亮度（1-255）",
           "day_color_temp_kelvin": "日间色温"
         }
+      },
+      "per_light": {
+        "title": "逐灯参数覆盖（{position}）",
+        "description": "灯具：`{entity}`。勾选自定义参数后，此灯将使用下列数值替代全局设定。",
+        "data": {
+          "ovr_enable": "为此灯使用自定义参数",
+          "brightness": "夜灯亮度（1-255）",
+          "color_temp_kelvin": "夜灯色温",
+          "day_brightness": "日间亮度（1-255）",
+          "day_color_temp_kelvin": "日间色温"
+        }
       }
     },
     "error": {
@@ -52,6 +63,17 @@
           "turn_on_listen": "夜间开灯时自动应用夜灯参数",
           "settle_delay": "开灯后稳定延迟",
           "day_enabled": "时段外开灯应用日间参数",
+          "day_brightness": "日间亮度（1-255）",
+          "day_color_temp_kelvin": "日间色温"
+        }
+      },
+      "per_light": {
+        "title": "逐灯参数覆盖（{position}）",
+        "description": "灯具：`{entity}`。勾选自定义参数后，此灯将使用下列数值替代全局设定。",
+        "data": {
+          "ovr_enable": "为此灯使用自定义参数",
+          "brightness": "夜灯亮度（1-255）",
+          "color_temp_kelvin": "夜灯色温",
           "day_brightness": "日间亮度（1-255）",
           "day_color_temp_kelvin": "日间色温"
         }

@@ -36,6 +36,7 @@ from .const import (
     CONF_END_TIME,
     CONF_LIGHTS,
     CONF_ONLY_WHEN_ON,
+    CONF_OVERRIDES,
     CONF_SETTLE_DELAY,
     CONF_TOLERANCE_BRIGHTNESS,
     CONF_TOLERANCE_KELVIN,
@@ -52,6 +53,10 @@ from .const import (
     DEFAULT_TOLERANCE_KELVIN,
     DEFAULT_TURN_ON_LISTEN,
     DEFAULT_VERIFY_DELAY,
+    OVR_BRIGHTNESS,
+    OVR_COLOR_TEMP_KELVIN,
+    OVR_DAY_BRIGHTNESS,
+    OVR_DAY_COLOR_TEMP_KELVIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -108,6 +113,20 @@ class NightLightManager:
         self.day_brightness: int = data.get(CONF_DAY_BRIGHTNESS, DEFAULT_DAY_BRIGHTNESS)
         self.day_kelvin: int = data.get(
             CONF_DAY_COLOR_TEMP_KELVIN, DEFAULT_DAY_COLOR_TEMP_KELVIN
+        )
+        self.overrides: dict[str, dict] = data.get(CONF_OVERRIDES, {})
+
+    def params_for(self, entity_id: str, night: bool) -> tuple[int, int]:
+        """Resolve effective (brightness, kelvin) for a light, applying overrides."""
+        ovr = self.overrides.get(entity_id, {})
+        if night:
+            return (
+                ovr.get(OVR_BRIGHTNESS, self.brightness),
+                ovr.get(OVR_COLOR_TEMP_KELVIN, self.kelvin),
+            )
+        return (
+            ovr.get(OVR_DAY_BRIGHTNESS, self.day_brightness),
+            ovr.get(OVR_DAY_COLOR_TEMP_KELVIN, self.day_kelvin),
         )
         self.machines: dict[str, LightMachine] = {
             light: LightMachine(entity_id=light) for light in self.lights
@@ -170,9 +189,11 @@ class NightLightManager:
             return  # 仅响应 关→开，忽略运行中的属性变化，避免自触发循环
         entity_id = event.data["entity_id"]
         if self._in_night_window():
-            brightness, kelvin, mode = self.brightness, self.kelvin, "night"
+            brightness, kelvin = self.params_for(entity_id, night=True)
+            mode = "night"
         elif self.day_enabled:
-            brightness, kelvin, mode = self.day_brightness, self.day_kelvin, "day"
+            brightness, kelvin = self.params_for(entity_id, night=False)
+            mode = "day"
         else:
             _LOGGER.debug(
                 "%s turned on outside night window and day mode off, ignored",
@@ -202,7 +223,8 @@ class NightLightManager:
         """Run one check-and-set round for all lights."""
         _LOGGER.info("Auto night light triggered (%s)", reason)
         for entity_id in self.lights:
-            await self._async_process_light(entity_id, self.brightness, self.kelvin)
+            brightness, kelvin = self.params_for(entity_id, night=True)
+            await self._async_process_light(entity_id, brightness, kelvin)
 
     def _matches(self, state: State, brightness: int, kelvin: int) -> bool:
         """Return True if the light already matches target within tolerance."""
@@ -279,7 +301,7 @@ class NightLightManager:
         """Verify the light reached the target after control."""
         machine = self.machines[entity_id]
         state = self.hass.states.get(entity_id)
-        target = machine.target or (self.brightness, self.kelvin)
+        target = machine.target or self.params_for(entity_id, night=True)
         if state is not None and self._matches(state, *target):
             machine.state = LightState.VERIFIED
             machine.last_error = None

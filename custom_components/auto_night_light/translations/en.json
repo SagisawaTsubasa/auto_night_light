@@ -24,6 +24,17 @@
           "day_brightness": "Daytime brightness (1-255)",
           "day_color_temp_kelvin": "Daytime color temperature"
         }
+      },
+      "per_light": {
+        "title": "Per-light override ({position})",
+        "description": "Light: `{entity}`. Enable custom parameters to override the global values for this light only.",
+        "data": {
+          "ovr_enable": "Use custom parameters for this light",
+          "brightness": "Night brightness (1-255)",
+          "color_temp_kelvin": "Night color temperature",
+          "day_brightness": "Daytime brightness (1-255)",
+          "day_color_temp_kelvin": "Daytime color temperature"
+        }
       }
     },
     "error": {
@@ -52,6 +63,17 @@
           "turn_on_listen": "Apply settings when a light turns on at night",
           "settle_delay": "Settle delay after turn-on",
           "day_enabled": "Apply daytime settings outside night window",
+          "day_brightness": "Daytime brightness (1-255)",
+          "day_color_temp_kelvin": "Daytime color temperature"
+        }
+      },
+      "per_light": {
+        "title": "Per-light override ({position})",
+        "description": "Light: `{entity}`. Enable custom parameters to override the global values for this light only.",
+        "data": {
+          "ovr_enable": "Use custom parameters for this light",
+          "brightness": "Night brightness (1-255)",
+          "color_temp_kelvin": "Night color temperature",
           "day_brightness": "Daytime brightness (1-255)",
           "day_color_temp_kelvin": "Daytime color temperature"
         }
