@@ -5,6 +5,7 @@ from __future__ import annotations
 import enum
 import logging
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
@@ -20,11 +21,15 @@ from homeassistant.const import (
     STATE_ON,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
+    SUN_EVENT_SUNRISE,
+    SUN_EVENT_SUNSET,
 )
 from homeassistant.helpers.event import (
     async_track_state_change_event,
+    async_track_sunset,
     async_track_time_change,
 )
+from homeassistant.helpers.sun import get_astral_event_date
 import homeassistant.util.dt as dt_util
 
 from .const import (
@@ -34,29 +39,44 @@ from .const import (
     CONF_DAY_COLOR_TEMP_KELVIN,
     CONF_DAY_ENABLED,
     CONF_END_TIME,
+    CONF_EXTRA_BRIGHTNESS,
+    CONF_EXTRA_COLOR_TEMP_KELVIN,
+    CONF_EXTRA_ENABLED,
+    CONF_EXTRA_START,
     CONF_LIGHTS,
     CONF_ONLY_WHEN_ON,
     CONF_OVERRIDES,
     CONF_SETTLE_DELAY,
+    CONF_SUN_OFFSET,
     CONF_TOLERANCE_BRIGHTNESS,
     CONF_TOLERANCE_KELVIN,
     CONF_TRIGGER_TIME,
     CONF_TURN_ON_LISTEN,
+    CONF_USE_SUN,
     CONF_VERIFY_DELAY,
     DEFAULT_BRIGHTNESS,
     DEFAULT_COLOR_TEMP_KELVIN,
     DEFAULT_DAY_BRIGHTNESS,
     DEFAULT_DAY_COLOR_TEMP_KELVIN,
     DEFAULT_END_TIME,
+    DEFAULT_EXTRA_BRIGHTNESS,
+    DEFAULT_EXTRA_COLOR_TEMP_KELVIN,
+    DEFAULT_EXTRA_START,
     DEFAULT_SETTLE_DELAY,
+    DEFAULT_SUN_OFFSET,
     DEFAULT_TOLERANCE_BRIGHTNESS,
     DEFAULT_TOLERANCE_KELVIN,
     DEFAULT_TURN_ON_LISTEN,
     DEFAULT_VERIFY_DELAY,
+    MODE_DAY,
+    MODE_EXTRA,
+    MODE_NIGHT,
     OVR_BRIGHTNESS,
     OVR_COLOR_TEMP_KELVIN,
     OVR_DAY_BRIGHTNESS,
     OVR_DAY_COLOR_TEMP_KELVIN,
+    OVR_EXTRA_BRIGHTNESS,
+    OVR_EXTRA_COLOR_TEMP_KELVIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -95,8 +115,18 @@ class NightLightManager:
         self.entry = entry
         data = {**entry.data, **entry.options}
         self.lights: list[str] = data[CONF_LIGHTS]
+        self.use_sun: bool = data.get(CONF_USE_SUN, False)
         self.trigger_time: str = data[CONF_TRIGGER_TIME]
         self.end_time: str = data.get(CONF_END_TIME, DEFAULT_END_TIME)
+        self.extra_enabled: bool = data.get(CONF_EXTRA_ENABLED, False)
+        self.extra_start: str = data.get(CONF_EXTRA_START, DEFAULT_EXTRA_START)
+        self.sun_offset: int = data.get(CONF_SUN_OFFSET, DEFAULT_SUN_OFFSET)
+        self.extra_brightness: int = data.get(
+            CONF_EXTRA_BRIGHTNESS, DEFAULT_EXTRA_BRIGHTNESS
+        )
+        self.extra_kelvin: int = data.get(
+            CONF_EXTRA_COLOR_TEMP_KELVIN, DEFAULT_EXTRA_COLOR_TEMP_KELVIN
+        )
         self.brightness: int = data.get(CONF_BRIGHTNESS, DEFAULT_BRIGHTNESS)
         self.kelvin: int = data.get(CONF_COLOR_TEMP_KELVIN, DEFAULT_COLOR_TEMP_KELVIN)
         self.tol_brightness: int = data.get(
@@ -121,36 +151,60 @@ class NightLightManager:
         self._unsub_time = None
         self._unsub_state = None
 
-    def params_for(self, entity_id: str, night: bool) -> tuple[int, int]:
+    def params_for(self, entity_id: str, mode: str) -> tuple[int, int]:
         """Resolve effective (brightness, kelvin) for a light, applying overrides."""
         ovr = self.overrides.get(entity_id, {})
-        if night:
+        if mode == MODE_EXTRA:
             return (
-                ovr.get(OVR_BRIGHTNESS, self.brightness),
-                ovr.get(OVR_COLOR_TEMP_KELVIN, self.kelvin),
+                ovr.get(OVR_EXTRA_BRIGHTNESS, self.extra_brightness),
+                ovr.get(OVR_EXTRA_COLOR_TEMP_KELVIN, self.extra_kelvin),
+            )
+        if mode == MODE_DAY:
+            return (
+                ovr.get(OVR_DAY_BRIGHTNESS, self.day_brightness),
+                ovr.get(OVR_DAY_COLOR_TEMP_KELVIN, self.day_kelvin),
             )
         return (
-            ovr.get(OVR_DAY_BRIGHTNESS, self.day_brightness),
-            ovr.get(OVR_DAY_COLOR_TEMP_KELVIN, self.day_kelvin),
+            ovr.get(OVR_BRIGHTNESS, self.brightness),
+            ovr.get(OVR_COLOR_TEMP_KELVIN, self.kelvin),
         )
 
     def start(self) -> None:
-        """Schedule the daily trigger and the turn-on listener."""
-        hour, minute, *_ = (int(p) for p in self.trigger_time.split(":"))
-        self._unsub_time = async_track_time_change(
-            self.hass, self._async_scheduled_trigger, hour=hour, minute=minute, second=0
-        )
-        _LOGGER.info(
-            "Auto night light scheduled at %02d:%02d for %s", hour, minute, self.lights
-        )
+        """Schedule the daily trigger (fixed time or sunset) and the listener."""
+        if self.use_sun:
+            offset = timedelta(minutes=self.sun_offset)
+            self._unsub_time = async_track_sunset(
+                self.hass, self._async_sunset_trigger, offset=offset
+            )
+            _LOGGER.info(
+                "Auto night light scheduled at sunset %+d min (sun.sun) for %s",
+                self.sun_offset,
+                self.lights,
+            )
+        else:
+            hour, minute, *_ = (int(p) for p in self.trigger_time.split(":"))
+            self._unsub_time = async_track_time_change(
+                self.hass,
+                self._async_scheduled_trigger,
+                hour=hour,
+                minute=minute,
+                second=0,
+            )
+            _LOGGER.info(
+                "Auto night light scheduled at %02d:%02d for %s",
+                hour,
+                minute,
+                self.lights,
+            )
         if self.turn_on_listen:
             self._unsub_state = async_track_state_change_event(
                 self.hass, self.lights, self._async_light_state_changed
             )
             _LOGGER.info(
-                "Turn-on listener active, night window %s -> %s",
+                "Turn-on listener active, night window %s -> %s (use_sun=%s)",
                 self.trigger_time,
                 self.end_time,
+                self.use_sun,
             )
 
     def stop(self) -> None:
@@ -162,16 +216,57 @@ class NightLightManager:
             self._unsub_state()
             self._unsub_state = None
 
-    def _in_night_window(self) -> bool:
-        """Return True if now is within the night window (supports overnight)."""
+    def _night_anchor_times(self) -> tuple:
+        """Resolve (night start, night end) anchor times.
+
+        use_sun 开启时取当日日落/日出并叠加 sun_offset 偏移；
+        计算失败则回退到固定时间。
+        """
+        if self.use_sun:
+            try:
+                today = dt_util.now().date()
+                offset = timedelta(minutes=self.sun_offset)
+                sunset = get_astral_event_date(self.hass, SUN_EVENT_SUNSET, today)
+                sunrise = get_astral_event_date(self.hass, SUN_EVENT_SUNRISE, today)
+                return (
+                    dt_util.as_local(sunset + offset).time(),
+                    dt_util.as_local(sunrise + offset).time(),
+                )
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning(
+                    "Sun events unavailable (%s), falling back to fixed times", err
+                )
+        return (
+            dt_util.parse_time(self.trigger_time),
+            dt_util.parse_time(self.end_time),
+        )
+
+    def current_mode(self) -> str | None:
+        """Resolve the active period from time anchors.
+
+        每个配置的时间是一个锚点：从该时刻起生效，直到下一个锚点。
+        锚点顺序按 24 小时循环取“最近已过去”的一个：
+        夜间开始 -> night，夜间结束 -> day（未启用日间则为 None），
+        额外时段开始 -> extra。
+        """
+        t_night_start, t_night_end = self._night_anchor_times()
+        anchors: list[tuple] = [(t_night_start, MODE_NIGHT)]
+        anchors.append((t_night_end, MODE_DAY if self.day_enabled else None))
+        if self.extra_enabled:
+            anchors.append((dt_util.parse_time(self.extra_start), MODE_EXTRA))
+
         now = dt_util.now().time()
-        start = dt_util.parse_time(self.trigger_time)
-        end = dt_util.parse_time(self.end_time)
-        if start is None or end is None:
-            return False
-        if start <= end:  # 同日窗口，如 22:00-23:30
-            return start <= now <= end
-        return now >= start or now <= end  # 跨夜窗口，如 23:00-06:00
+        now_min = now.hour * 60 + now.minute
+        best_mode: str | None = None
+        best_delta: int | None = None
+        for t, mode in anchors:
+            if t is None:
+                continue
+            anchor_min = t.hour * 60 + t.minute
+            delta = (now_min - anchor_min) % 1440
+            if best_delta is None or delta < best_delta:
+                best_mode, best_delta = mode, delta
+        return best_mode
 
     async def _async_light_state_changed(
         self, event: Event[EventStateChangedData]
@@ -188,18 +283,13 @@ class NightLightManager:
         ):
             return  # 仅响应 关→开，忽略运行中的属性变化，避免自触发循环
         entity_id = event.data["entity_id"]
-        if self._in_night_window():
-            brightness, kelvin = self.params_for(entity_id, night=True)
-            mode = "night"
-        elif self.day_enabled:
-            brightness, kelvin = self.params_for(entity_id, night=False)
-            mode = "day"
-        else:
+        mode = self.current_mode()
+        if mode is None:
             _LOGGER.debug(
-                "%s turned on outside night window and day mode off, ignored",
-                entity_id,
+                "%s turned on outside all active periods, ignored", entity_id
             )
             return
+        brightness, kelvin = self.params_for(entity_id, mode)
         machine = self.machines.get(entity_id)
         if machine is None:
             _LOGGER.debug("%s not in machine table (stale listener?), skipped", entity_id)
@@ -222,11 +312,15 @@ class NightLightManager:
         """Entry point for the scheduled time trigger."""
         await self.async_trigger(reason="schedule")
 
+    async def _async_sunset_trigger(self) -> None:
+        """Entry point for the sunset trigger (sun integration)."""
+        await self.async_trigger(reason="sunset")
+
     async def async_trigger(self, reason: str = "manual") -> None:
         """Run one check-and-set round for all lights."""
         _LOGGER.info("Auto night light triggered (%s)", reason)
         for entity_id in self.lights:
-            brightness, kelvin = self.params_for(entity_id, night=True)
+            brightness, kelvin = self.params_for(entity_id, MODE_NIGHT)
             await self._async_process_light(entity_id, brightness, kelvin)
 
     @staticmethod
@@ -324,7 +418,7 @@ class NightLightManager:
         """Verify the light reached the target after control."""
         machine = self.machines[entity_id]
         state = self.hass.states.get(entity_id)
-        target = machine.target or self.params_for(entity_id, night=True)
+        target = machine.target or self.params_for(entity_id, MODE_NIGHT)
         if state is not None and self._matches(state, *target):
             machine.state = LightState.VERIFIED
             machine.last_error = None

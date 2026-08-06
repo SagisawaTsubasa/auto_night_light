@@ -30,24 +30,29 @@ def _pct(v) -> int:
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate v1 (brightness 1-255) to v2 (brightness 1-100%)."""
-    if entry.version >= 2:
+    """Migrate v1 (brightness 1-255) -> v2 (percent) -> v3 (sun/extra periods)."""
+    if entry.version >= 3:
         return True
-    _LOGGER.info("Migrating auto night light entry to v2 (brightness percent)")
     data = dict(entry.data)
     options = dict(entry.options)
+    if entry.version < 2:
+        _LOGGER.info("Migrating auto night light entry to v2 (brightness percent)")
+        for store in (data, options):
+            for key in (CONF_BRIGHTNESS, CONF_DAY_BRIGHTNESS):
+                if key in store:
+                    store[key] = _pct(store[key])
+            if CONF_TOLERANCE_BRIGHTNESS in store:
+                store[CONF_TOLERANCE_BRIGHTNESS] = _pct(store[CONF_TOLERANCE_BRIGHTNESS])
+            for ovr in store.get(CONF_OVERRIDES, {}).values():
+                for key in (OVR_BRIGHTNESS, OVR_DAY_BRIGHTNESS):
+                    if key in ovr:
+                        ovr[key] = _pct(ovr[key])
+    _LOGGER.info("Migrating auto night light entry to v3 (sun/extra periods)")
+    # v3 新增键均带默认值；清理已废弃的 extra_end 键
     for store in (data, options):
-        for key in (CONF_BRIGHTNESS, CONF_DAY_BRIGHTNESS):
-            if key in store:
-                store[key] = _pct(store[key])
-        if CONF_TOLERANCE_BRIGHTNESS in store:
-            store[CONF_TOLERANCE_BRIGHTNESS] = _pct(store[CONF_TOLERANCE_BRIGHTNESS])
-        for ovr in store.get(CONF_OVERRIDES, {}).values():
-            for key in (OVR_BRIGHTNESS, OVR_DAY_BRIGHTNESS):
-                if key in ovr:
-                    ovr[key] = _pct(ovr[key])
+        store.pop("extra_end", None)
     hass.config_entries.async_update_entry(
-        entry, data=data, options=options, version=2
+        entry, data=data, options=options, version=3
     )
     return True
 

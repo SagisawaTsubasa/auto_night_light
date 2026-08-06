@@ -2,27 +2,39 @@
   "config": {
     "step": {
       "user": {
+        "title": "时间设置",
+        "data": {
+          "use_sun": "使用日出日落（内置 sun 集成）",
+          "sun_offset": "日出日落偏移（分钟，负数=提前）",
+          "trigger_time": "夜间开始时间（启用日出日落时忽略）",
+          "end_time": "夜间结束/日间开始时间（启用日出日落时忽略）",
+          "extra_enabled": "启用额外时段",
+          "extra_start": "额外时段开始时间（持续到下一个时间点）",
+          "day_enabled": "夜间结束后应用日间参数"
+        }
+      },
+      "lights": {
         "title": "选择灯具",
         "data": {
-          "lights": "灯具实体"
+          "lights": "灯具实体",
+          "custom_per_light": "为单个灯具设置不同参数（额外设置）"
         }
       },
       "settings": {
-        "title": "夜灯参数",
+        "title": "各时段参数",
         "data": {
-          "trigger_time": "每日触发时间",
-          "brightness": "目标亮度（%）",
-          "color_temp_kelvin": "目标色温",
+          "brightness": "夜间亮度（%）",
+          "color_temp_kelvin": "夜间色温",
+          "extra_brightness": "额外时段亮度（%）",
+          "extra_color_temp_kelvin": "额外时段色温",
+          "day_brightness": "日间亮度（%）",
+          "day_color_temp_kelvin": "日间色温",
           "tolerance_brightness": "亮度容差（%）",
           "tolerance_kelvin": "色温容差",
           "verify_delay": "控制后验证延迟",
-          "only_when_on": "仅调整已开启的灯",
-          "end_time": "夜间时段结束时间",
-          "turn_on_listen": "夜间开灯时自动应用夜灯参数",
           "settle_delay": "开灯后稳定延迟",
-          "day_enabled": "时段外开灯应用日间参数",
-          "day_brightness": "日间亮度（%）",
-          "day_color_temp_kelvin": "日间色温"
+          "turn_on_listen": "开灯时自动应用当前时段参数",
+          "only_when_on": "仅调整已开启的灯"
         }
       },
       "per_light": {
@@ -30,8 +42,10 @@
         "description": "灯具：`{entity}`。勾选自定义参数后，此灯将使用下列数值替代全局设定。",
         "data": {
           "ovr_enable": "为此灯使用自定义参数",
-          "brightness": "夜灯亮度（%）",
-          "color_temp_kelvin": "夜灯色温",
+          "brightness": "夜间亮度（%）",
+          "color_temp_kelvin": "夜间色温",
+          "extra_brightness": "额外时段亮度（%）",
+          "extra_color_temp_kelvin": "额外时段色温",
           "day_brightness": "日间亮度（%）",
           "day_color_temp_kelvin": "日间色温"
         }
@@ -44,27 +58,39 @@
   "options": {
     "step": {
       "init": {
+        "title": "时间设置",
+        "data": {
+          "use_sun": "使用日出日落（内置 sun 集成）",
+          "sun_offset": "日出日落偏移（分钟，负数=提前）",
+          "trigger_time": "夜间开始时间（启用日出日落时忽略）",
+          "end_time": "夜间结束/日间开始时间（启用日出日落时忽略）",
+          "extra_enabled": "启用额外时段",
+          "extra_start": "额外时段开始时间（持续到下一个时间点）",
+          "day_enabled": "夜间结束后应用日间参数"
+        }
+      },
+      "lights": {
         "title": "选择灯具",
         "data": {
-          "lights": "灯具实体"
+          "lights": "灯具实体",
+          "custom_per_light": "为单个灯具设置不同参数（额外设置）"
         }
       },
       "settings": {
-        "title": "夜灯参数",
+        "title": "各时段参数",
         "data": {
-          "trigger_time": "每日触发时间",
-          "brightness": "目标亮度（%）",
-          "color_temp_kelvin": "目标色温",
+          "brightness": "夜间亮度（%）",
+          "color_temp_kelvin": "夜间色温",
+          "extra_brightness": "额外时段亮度（%）",
+          "extra_color_temp_kelvin": "额外时段色温",
+          "day_brightness": "日间亮度（%）",
+          "day_color_temp_kelvin": "日间色温",
           "tolerance_brightness": "亮度容差（%）",
           "tolerance_kelvin": "色温容差",
           "verify_delay": "控制后验证延迟",
-          "only_when_on": "仅调整已开启的灯",
-          "end_time": "夜间时段结束时间",
-          "turn_on_listen": "夜间开灯时自动应用夜灯参数",
           "settle_delay": "开灯后稳定延迟",
-          "day_enabled": "时段外开灯应用日间参数",
-          "day_brightness": "日间亮度（%）",
-          "day_color_temp_kelvin": "日间色温"
+          "turn_on_listen": "开灯时自动应用当前时段参数",
+          "only_when_on": "仅调整已开启的灯"
         }
       },
       "per_light": {
@@ -72,8 +98,10 @@
         "description": "灯具：`{entity}`。勾选自定义参数后，此灯将使用下列数值替代全局设定。",
         "data": {
           "ovr_enable": "为此灯使用自定义参数",
-          "brightness": "夜灯亮度（%）",
-          "color_temp_kelvin": "夜灯色温",
+          "brightness": "夜间亮度（%）",
+          "color_temp_kelvin": "夜间色温",
+          "extra_brightness": "额外时段亮度（%）",
+          "extra_color_temp_kelvin": "额外时段色温",
           "day_brightness": "日间亮度（%）",
           "day_color_temp_kelvin": "日间色温"
         }
