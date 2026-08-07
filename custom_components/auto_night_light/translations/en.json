@@ -40,7 +40,7 @@
       },
       "lights_extra": {
         "title": "Per-light extra settings",
-        "description": "Enable custom parameters per light. Only enabled lights get their own settings page.",
+        "description": "Enable custom parameters per light. Only enabled lights get their own settings page.\n\n{lights}",
         "data": {}
       },
       "settings": {
@@ -60,7 +60,7 @@
       },
       "per_light": {
         "title": "Per-light override ({position})",
-        "description": "Light: `{entity}`. Fields: night, daytime (if enabled), then one brightness/color-temperature pair per extra period (extra_0 = period 1, etc.).",
+        "description": "Light: {name} (`{entity}`). Fields: night, daytime (if enabled), then one brightness/color-temperature pair per extra period (extra_0 = period 1, etc.).",
         "data": {
           "ovr_enable": "Use custom parameters for this light",
           "brightness": "Night brightness (%)",
@@ -115,7 +115,7 @@
       },
       "lights_extra": {
         "title": "Per-light extra settings",
-        "description": "Enable custom parameters per light. Only enabled lights get their own settings page.",
+        "description": "Enable custom parameters per light. Only enabled lights get their own settings page.\n\n{lights}",
         "data": {}
       },
       "settings": {
@@ -135,7 +135,7 @@
       },
       "per_light": {
         "title": "Per-light override ({position})",
-        "description": "Light: `{entity}`. Fields: night, daytime (if enabled), then one brightness/color-temperature pair per extra period (extra_0 = period 1, etc.).",
+        "description": "Light: {name} (`{entity}`). Fields: night, daytime (if enabled), then one brightness/color-temperature pair per extra period (extra_0 = period 1, etc.).",
         "data": {
           "ovr_enable": "Use custom parameters for this light",
           "brightness": "Night brightness (%)",

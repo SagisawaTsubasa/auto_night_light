@@ -387,6 +387,10 @@ async def _per_light_step(flow, user_input, finish):
         return await finish()
 
     entity = flow._custom_lights[flow._idx]
+    state = flow.hass.states.get(entity)
+    name = (
+        state.attributes.get("friendly_name", entity) if state is not None else entity
+    )
     return flow.async_show_form(
         step_id="per_light",
         data_schema=_override_schema(
@@ -397,6 +401,7 @@ async def _per_light_step(flow, user_input, finish):
         ),
         description_placeholders={
             "entity": entity,
+            "name": name,
             "position": f"{flow._idx + 1}/{len(flow._custom_lights)}",
         },
     )
@@ -480,9 +485,19 @@ class _FlowMixin:
                 light for light in self._lights if user_input.get(light)
             ]
             return await self._async_step_settings()
+        mapping = []
+        for light in self._lights:
+            state = self.hass.states.get(light)
+            name = (
+                state.attributes.get("friendly_name", light)
+                if state is not None
+                else light
+            )
+            mapping.append(f"{name} = `{light}`")
         return self.async_show_form(
             step_id="lights_extra",
             data_schema=_lights_extra_schema(self._lights, self._custom_lights),
+            description_placeholders={"lights": "\n\n".join(mapping)},
         )
 
     async def _async_step_settings(self, user_input=None, defaults=None):
