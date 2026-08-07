@@ -8,15 +8,19 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 
 from .const import (
+    ANCHOR_FIXED,
+    ANCHOR_SUNRISE,
+    ANCHOR_SUNSET,
     CONF_BRIGHTNESS,
     CONF_CUSTOM_PER_LIGHT,
     CONF_DAY_BRIGHTNESS,
+    CONF_END_MODE,
+    CONF_END_OFFSET,
     CONF_EXTRA_COUNT,
     CONF_EXTRAS,
     CONF_OVERRIDES,
-    CONF_SUN_SOURCE,
-    CONF_SUNRISE_OFFSET,
-    CONF_SUNSET_OFFSET,
+    CONF_START_MODE,
+    CONF_START_OFFSET,
     CONF_TOLERANCE_BRIGHTNESS,
     DEFAULT_EXTRA_BRIGHTNESS,
     DEFAULT_EXTRA_COLOR_TEMP_KELVIN,
@@ -31,8 +35,6 @@ from .const import (
     OVR_EXTRA_COLOR_TEMP_KELVIN,
     OVR_EXTRAS,
     SERVICE_TRIGGER_NOW,
-    SUN_SOURCE_BUILTIN,
-    SUN_SOURCE_NONE,
 )
 from .manager import NightLightManager
 
@@ -47,8 +49,8 @@ def _pct(v) -> int:
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate v1 (0-255) -> v2 (percent) -> v4 (sun sources / extra list)."""
-    if entry.version >= 4:
+    """Migrate old entries to the current version (v5)."""
+    if entry.version >= 5:
         return True
     data = dict(entry.data)
     options = dict(entry.options)
@@ -64,55 +66,71 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 for key in (OVR_BRIGHTNESS, OVR_DAY_BRIGHTNESS):
                     if key in ovr:
                         ovr[key] = _pct(ovr[key])
-    _LOGGER.info("Migrating auto night light entry to v4 (sun sources/extra list)")
-    for store in (data, options):
-        # v3 日出日落：use_sun + 单一偏移 -> 来源枚举 + 双偏移
-        use_sun = store.pop("use_sun", False)
-        store.setdefault(CONF_SUN_SOURCE, SUN_SOURCE_BUILTIN if use_sun else SUN_SOURCE_NONE)
-        old_offset = store.pop("sun_offset", 0)
-        store.setdefault(CONF_SUNSET_OFFSET, old_offset)
-        store.setdefault(CONF_SUNRISE_OFFSET, old_offset)
-        # v3 单一额外时段 -> 额外时段列表
-        store.pop("extra_enabled", None)
-        store.pop("extra_end", None)
-        if CONF_EXTRAS not in store:
-            old_start = store.pop("extra_start", None)
-            if old_start is not None:
-                store[CONF_EXTRAS] = [
-                    {
-                        EXTRA_NAME: "",
-                        EXTRA_START: old_start,
-                        EXTRA_BRIGHTNESS: store.pop(
-                            "extra_brightness", DEFAULT_EXTRA_BRIGHTNESS
-                        ),
-                        EXTRA_COLOR_TEMP_KELVIN: store.pop(
-                            "extra_color_temp_kelvin", DEFAULT_EXTRA_COLOR_TEMP_KELVIN
-                        ),
+    if entry.version < 4:
+        _LOGGER.info("Migrating auto night light entry to v4 (sun sources/extra list)")
+        for store in (data, options):
+            # v3 日出日落：use_sun + 单一偏移 -> 来源枚举 + 双偏移
+            use_sun = store.pop("use_sun", False)
+            store.setdefault("sun_source", "builtin" if use_sun else "none")
+            old_offset = store.pop("sun_offset", 0)
+            store.setdefault("sunset_offset", old_offset)
+            store.setdefault("sunrise_offset", old_offset)
+            # v3 单一额外时段 -> 额外时段列表
+            store.pop("extra_enabled", None)
+            store.pop("extra_end", None)
+            if CONF_EXTRAS not in store:
+                old_start = store.pop("extra_start", None)
+                if old_start is not None:
+                    store[CONF_EXTRAS] = [
+                        {
+                            EXTRA_NAME: "",
+                            EXTRA_START: old_start,
+                            EXTRA_BRIGHTNESS: store.pop(
+                                "extra_brightness", DEFAULT_EXTRA_BRIGHTNESS
+                            ),
+                            EXTRA_COLOR_TEMP_KELVIN: store.pop(
+                                "extra_color_temp_kelvin", DEFAULT_EXTRA_COLOR_TEMP_KELVIN
+                            ),
+                        }
+                    ]
+                    store[CONF_EXTRA_COUNT] = 1
+                else:
+                    store.setdefault(CONF_EXTRAS, [])
+                    store.setdefault(CONF_EXTRA_COUNT, 0)
+            # v3 布尔逐灯开关 -> 逐灯列表
+            custom = store.get(CONF_CUSTOM_PER_LIGHT)
+            if isinstance(custom, bool):
+                store[CONF_CUSTOM_PER_LIGHT] = (
+                    list(store.get(CONF_OVERRIDES, {})) if custom else []
+                )
+            # v3 逐灯覆盖的单一时段字段 -> 列表键
+            for ovr in store.get(CONF_OVERRIDES, {}).values():
+                eb = ovr.pop("extra_brightness", None)
+                ek = ovr.pop("extra_color_temp_kelvin", None)
+                if eb is not None and ek is not None:
+                    ovr[OVR_EXTRAS] = {
+                        "0": {
+                            OVR_EXTRA_BRIGHTNESS: eb,
+                            OVR_EXTRA_COLOR_TEMP_KELVIN: ek,
+                        }
                     }
-                ]
-                store[CONF_EXTRA_COUNT] = 1
+    if entry.version < 5:
+        _LOGGER.info("Migrating auto night light entry to v5 (per-anchor sources)")
+        for store in (data, options):
+            # v4 全局时间来源 -> 夜间开始/结束各自独立来源
+            source = store.pop("sun_source", "none")
+            sunset_offset = store.pop("sunset_offset", 0)
+            sunrise_offset = store.pop("sunrise_offset", 0)
+            if source == "none":
+                store.setdefault(CONF_START_MODE, ANCHOR_FIXED)
+                store.setdefault(CONF_END_MODE, ANCHOR_FIXED)
             else:
-                store.setdefault(CONF_EXTRAS, [])
-                store.setdefault(CONF_EXTRA_COUNT, 0)
-        # v3 布尔逐灯开关 -> 逐灯列表
-        custom = store.get(CONF_CUSTOM_PER_LIGHT)
-        if isinstance(custom, bool):
-            store[CONF_CUSTOM_PER_LIGHT] = (
-                list(store.get(CONF_OVERRIDES, {})) if custom else []
-            )
-        # v3 逐灯覆盖的单一时段字段 -> 列表键
-        for ovr in store.get(CONF_OVERRIDES, {}).values():
-            eb = ovr.pop("extra_brightness", None)
-            ek = ovr.pop("extra_color_temp_kelvin", None)
-            if eb is not None and ek is not None:
-                ovr[OVR_EXTRAS] = {
-                    "0": {
-                        OVR_EXTRA_BRIGHTNESS: eb,
-                        OVR_EXTRA_COLOR_TEMP_KELVIN: ek,
-                    }
-                }
+                store.setdefault(CONF_START_MODE, ANCHOR_SUNSET)
+                store.setdefault(CONF_END_MODE, ANCHOR_SUNRISE)
+            store.setdefault(CONF_START_OFFSET, sunset_offset)
+            store.setdefault(CONF_END_OFFSET, sunrise_offset)
     hass.config_entries.async_update_entry(
-        entry, data=data, options=options, version=4
+        entry, data=data, options=options, version=5
     )
     return True
 

@@ -3,14 +3,15 @@
     "step": {
       "user": {
         "title": "Time settings",
-        "description": "Night period time source and anchor times. Each configured time is an anchor: it takes effect from that moment until the next anchor.",
+        "description": "Each anchor of the night period picks its own source: fixed time, sunset or sunrise, with an independent offset.",
         "data": {
-          "sun_source": "Night time source",
-          "sun_entity": "Custom sun entity (needs next_rising / next_setting attributes)",
-          "sunset_offset": "Sunset offset (minutes, negative = earlier)",
-          "sunrise_offset": "Sunrise offset (minutes, negative = earlier)",
-          "trigger_time": "Night starts at (used when source is fixed time)",
-          "end_time": "Night ends / daytime starts (used when source is fixed time)",
+          "start_mode": "Night starts at",
+          "trigger_time": "Night start fixed time (when source is fixed)",
+          "start_offset": "Night start offset (minutes, negative = earlier)",
+          "end_mode": "Night ends / daytime starts at",
+          "end_time": "Night end fixed time (when source is fixed)",
+          "end_offset": "Night end offset (minutes, negative = earlier)",
+          "sun_entity": "Sun entity for sunrise/sunset (default: built-in sun.sun; custom entities need next_rising / next_setting attributes)",
           "day_enabled": "Apply daytime settings after night ends",
           "extra_enabled": "Enable extra time periods"
         }
@@ -77,14 +78,15 @@
     "step": {
       "init": {
         "title": "Time settings",
-        "description": "Night period time source and anchor times. Each configured time is an anchor: it takes effect from that moment until the next anchor.",
+        "description": "Each anchor of the night period picks its own source: fixed time, sunset or sunrise, with an independent offset.",
         "data": {
-          "sun_source": "Night time source",
-          "sun_entity": "Custom sun entity (needs next_rising / next_setting attributes)",
-          "sunset_offset": "Sunset offset (minutes, negative = earlier)",
-          "sunrise_offset": "Sunrise offset (minutes, negative = earlier)",
-          "trigger_time": "Night starts at (used when source is fixed time)",
-          "end_time": "Night ends / daytime starts (used when source is fixed time)",
+          "start_mode": "Night starts at",
+          "trigger_time": "Night start fixed time (when source is fixed)",
+          "start_offset": "Night start offset (minutes, negative = earlier)",
+          "end_mode": "Night ends / daytime starts at",
+          "end_time": "Night end fixed time (when source is fixed)",
+          "end_offset": "Night end offset (minutes, negative = earlier)",
+          "sun_entity": "Sun entity for sunrise/sunset (default: built-in sun.sun; custom entities need next_rising / next_setting attributes)",
           "day_enabled": "Apply daytime settings after night ends",
           "extra_enabled": "Enable extra time periods"
         }
@@ -148,11 +150,11 @@
     }
   },
   "selector": {
-    "sun_source": {
+    "anchor_mode": {
       "options": {
-        "none": "Fixed times",
-        "builtin": "Built-in sun integration",
-        "custom": "Custom entity"
+        "fixed": "Fixed time",
+        "sunset": "Sunset",
+        "sunrise": "Sunrise"
       }
     }
   }

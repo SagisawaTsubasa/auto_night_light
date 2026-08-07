@@ -21,6 +21,9 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    ANCHOR_MODES,
+    ANCHOR_SUNRISE,
+    ANCHOR_SUNSET,
     CONF_BRIGHTNESS,
     CONF_COLOR_TEMP_KELVIN,
     CONF_CUSTOM_PER_LIGHT,
@@ -34,11 +37,12 @@ from .const import (
     CONF_LIGHTS,
     CONF_ONLY_WHEN_ON,
     CONF_OVERRIDES,
+    CONF_END_MODE,
+    CONF_END_OFFSET,
     CONF_SETTLE_DELAY,
+    CONF_START_MODE,
+    CONF_START_OFFSET,
     CONF_SUN_ENTITY,
-    CONF_SUN_SOURCE,
-    CONF_SUNRISE_OFFSET,
-    CONF_SUNSET_OFFSET,
     CONF_TOLERANCE_BRIGHTNESS,
     CONF_TOLERANCE_KELVIN,
     CONF_TRIGGER_TIME,
@@ -52,10 +56,10 @@ from .const import (
     DEFAULT_EXTRA_BRIGHTNESS,
     DEFAULT_EXTRA_COLOR_TEMP_KELVIN,
     DEFAULT_EXTRA_START,
+    DEFAULT_END_OFFSET,
     DEFAULT_SETTLE_DELAY,
+    DEFAULT_START_OFFSET,
     DEFAULT_SUN_ENTITY,
-    DEFAULT_SUNRISE_OFFSET,
-    DEFAULT_SUNSET_OFFSET,
     DEFAULT_TOLERANCE_BRIGHTNESS,
     DEFAULT_TOLERANCE_KELVIN,
     DEFAULT_TURN_ON_LISTEN,
@@ -73,8 +77,6 @@ from .const import (
     OVR_EXTRA_BRIGHTNESS,
     OVR_EXTRA_COLOR_TEMP_KELVIN,
     OVR_EXTRAS,
-    SUN_SOURCE_BUILTIN,
-    SUN_SOURCES,
 )
 
 OVR_ENABLE = "ovr_enable"
@@ -118,40 +120,48 @@ def _add_period_fields(
     schema[k_marker] = k_sel
 
 
-def _time_schema(defaults: dict) -> vol.Schema:
-    """Step 1: base period times, sun source and offsets, extra/day toggles."""
-    sunset_marker, sunset_sel = _offset_selector(
-        CONF_SUNSET_OFFSET, defaults.get(CONF_SUNSET_OFFSET, DEFAULT_SUNSET_OFFSET)
+def _anchor_select(key: str, default: str) -> tuple:
+    return vol.Required(key, default=default), SelectSelector(
+        SelectSelectorConfig(
+            options=ANCHOR_MODES,
+            mode=SelectSelectorMode.DROPDOWN,
+            translation_key="anchor_mode",
+        )
     )
-    sunrise_marker, sunrise_sel = _offset_selector(
-        CONF_SUNRISE_OFFSET, defaults.get(CONF_SUNRISE_OFFSET, DEFAULT_SUNRISE_OFFSET)
+
+
+def _time_schema(defaults: dict) -> vol.Schema:
+    """Step 1: per-anchor sources for night start/end, extras/day toggles."""
+    start_mode_marker, start_mode_sel = _anchor_select(
+        CONF_START_MODE, defaults.get(CONF_START_MODE, ANCHOR_SUNSET)
+    )
+    end_mode_marker, end_mode_sel = _anchor_select(
+        CONF_END_MODE, defaults.get(CONF_END_MODE, ANCHOR_SUNRISE)
+    )
+    start_off_marker, start_off_sel = _offset_selector(
+        CONF_START_OFFSET, defaults.get(CONF_START_OFFSET, DEFAULT_START_OFFSET)
+    )
+    end_off_marker, end_off_sel = _offset_selector(
+        CONF_END_OFFSET, defaults.get(CONF_END_OFFSET, DEFAULT_END_OFFSET)
     )
     return vol.Schema(
         {
+            start_mode_marker: start_mode_sel,
             vol.Required(
-                CONF_SUN_SOURCE,
-                default=defaults.get(CONF_SUN_SOURCE, SUN_SOURCE_BUILTIN),
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=SUN_SOURCES,
-                    mode=SelectSelectorMode.DROPDOWN,
-                    translation_key="sun_source",
-                )
-            ),
+                CONF_TRIGGER_TIME, default=defaults.get(CONF_TRIGGER_TIME, "22:00:00")
+            ): TimeSelector(),
+            start_off_marker: start_off_sel,
+            end_mode_marker: end_mode_sel,
+            vol.Required(
+                CONF_END_TIME, default=defaults.get(CONF_END_TIME, DEFAULT_END_TIME)
+            ): TimeSelector(),
+            end_off_marker: end_off_sel,
             vol.Required(
                 CONF_SUN_ENTITY,
                 default=defaults.get(CONF_SUN_ENTITY, DEFAULT_SUN_ENTITY),
             ): EntitySelector(
                 EntitySelectorConfig(domain=["sun", "sensor"])
             ),
-            sunset_marker: sunset_sel,
-            sunrise_marker: sunrise_sel,
-            vol.Required(
-                CONF_TRIGGER_TIME, default=defaults.get(CONF_TRIGGER_TIME, "22:00:00")
-            ): TimeSelector(),
-            vol.Required(
-                CONF_END_TIME, default=defaults.get(CONF_END_TIME, DEFAULT_END_TIME)
-            ): TimeSelector(),
             vol.Required(
                 CONF_DAY_ENABLED, default=defaults.get(CONF_DAY_ENABLED, False)
             ): BooleanSelector(),
@@ -509,7 +519,7 @@ class _FlowMixin:
 class AutoNightLightConfigFlow(_FlowMixin, ConfigFlow, domain=DOMAIN):
     """Handle the initial config flow."""
 
-    VERSION = 4
+    VERSION = 5
 
     def __init__(self) -> None:
         """Store intermediate data between steps."""

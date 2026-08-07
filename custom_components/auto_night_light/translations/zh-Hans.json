@@ -3,14 +3,15 @@
     "step": {
       "user": {
         "title": "时间设置",
-        "description": "夜间时段的时间来源与锚点时间。每个设置的时间是一个锚点：从该时刻起生效，直到下一个锚点。",
+        "description": "夜间的开始和结束锚点可各自独立选择来源：固定时间、日落或日出，并分别设置偏移。例如：22:00 固定入夜，日出+15 分钟恢复日间。",
         "data": {
-          "sun_source": "夜间时间来源",
-          "sun_entity": "自定义日出日落实体（需含 next_rising / next_setting 属性）",
-          "sunset_offset": "日落偏移（分钟，负数=提前）",
-          "sunrise_offset": "日出偏移（分钟，负数=提前）",
-          "trigger_time": "夜间开始时间（来源为固定时间时生效）",
-          "end_time": "夜间结束/日间开始时间（来源为固定时间时生效）",
+          "start_mode": "夜间开始方式",
+          "trigger_time": "夜间开始固定时间（方式为固定时间时生效）",
+          "start_offset": "夜间开始偏移（分钟，负数=提前）",
+          "end_mode": "夜间结束/日间开始方式",
+          "end_time": "夜间结束固定时间（方式为固定时间时生效）",
+          "end_offset": "夜间结束偏移（分钟，负数=提前）",
+          "sun_entity": "日出日落实体（默认内置 sun.sun；自定义实体需含 next_rising / next_setting 属性）",
           "day_enabled": "夜间结束后应用日间参数",
           "extra_enabled": "启用额外时段"
         }
@@ -77,14 +78,15 @@
     "step": {
       "init": {
         "title": "时间设置",
-        "description": "夜间时段的时间来源与锚点时间。每个设置的时间是一个锚点：从该时刻起生效，直到下一个锚点。",
+        "description": "夜间的开始和结束锚点可各自独立选择来源：固定时间、日落或日出，并分别设置偏移。例如：22:00 固定入夜，日出+15 分钟恢复日间。",
         "data": {
-          "sun_source": "夜间时间来源",
-          "sun_entity": "自定义日出日落实体（需含 next_rising / next_setting 属性）",
-          "sunset_offset": "日落偏移（分钟，负数=提前）",
-          "sunrise_offset": "日出偏移（分钟，负数=提前）",
-          "trigger_time": "夜间开始时间（来源为固定时间时生效）",
-          "end_time": "夜间结束/日间开始时间（来源为固定时间时生效）",
+          "start_mode": "夜间开始方式",
+          "trigger_time": "夜间开始固定时间（方式为固定时间时生效）",
+          "start_offset": "夜间开始偏移（分钟，负数=提前）",
+          "end_mode": "夜间结束/日间开始方式",
+          "end_time": "夜间结束固定时间（方式为固定时间时生效）",
+          "end_offset": "夜间结束偏移（分钟，负数=提前）",
+          "sun_entity": "日出日落实体（默认内置 sun.sun；自定义实体需含 next_rising / next_setting 属性）",
           "day_enabled": "夜间结束后应用日间参数",
           "extra_enabled": "启用额外时段"
         }
@@ -148,11 +150,11 @@
     }
   },
   "selector": {
-    "sun_source": {
+    "anchor_mode": {
       "options": {
-        "none": "固定时间",
-        "builtin": "内置 sun 集成",
-        "custom": "自定义实体"
+        "fixed": "固定时间",
+        "sunset": "日落",
+        "sunrise": "日出"
       }
     }
   }

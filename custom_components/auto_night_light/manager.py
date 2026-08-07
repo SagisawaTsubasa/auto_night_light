@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 import logging
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
@@ -27,28 +27,30 @@ from homeassistant.const import (
 from homeassistant.helpers.event import (
     async_track_point_in_time,
     async_track_state_change_event,
-    async_track_sunset,
-    async_track_time_change,
 )
 from homeassistant.helpers.sun import get_astral_event_date
 import homeassistant.util.dt as dt_util
 
 from .const import (
+    ANCHOR_FIXED,
+    ANCHOR_SUNRISE,
+    ANCHOR_SUNSET,
     CONF_BRIGHTNESS,
     CONF_COLOR_TEMP_KELVIN,
     CONF_DAY_BRIGHTNESS,
     CONF_DAY_COLOR_TEMP_KELVIN,
     CONF_DAY_ENABLED,
+    CONF_END_MODE,
+    CONF_END_OFFSET,
     CONF_END_TIME,
     CONF_EXTRAS,
     CONF_LIGHTS,
     CONF_ONLY_WHEN_ON,
     CONF_OVERRIDES,
     CONF_SETTLE_DELAY,
+    CONF_START_MODE,
+    CONF_START_OFFSET,
     CONF_SUN_ENTITY,
-    CONF_SUN_SOURCE,
-    CONF_SUNRISE_OFFSET,
-    CONF_SUNSET_OFFSET,
     CONF_TOLERANCE_BRIGHTNESS,
     CONF_TOLERANCE_KELVIN,
     CONF_TRIGGER_TIME,
@@ -58,13 +60,13 @@ from .const import (
     DEFAULT_COLOR_TEMP_KELVIN,
     DEFAULT_DAY_BRIGHTNESS,
     DEFAULT_DAY_COLOR_TEMP_KELVIN,
+    DEFAULT_END_OFFSET,
     DEFAULT_END_TIME,
     DEFAULT_EXTRA_BRIGHTNESS,
     DEFAULT_EXTRA_COLOR_TEMP_KELVIN,
     DEFAULT_SETTLE_DELAY,
+    DEFAULT_START_OFFSET,
     DEFAULT_SUN_ENTITY,
-    DEFAULT_SUNRISE_OFFSET,
-    DEFAULT_SUNSET_OFFSET,
     DEFAULT_TOLERANCE_BRIGHTNESS,
     DEFAULT_TOLERANCE_KELVIN,
     DEFAULT_TURN_ON_LISTEN,
@@ -82,8 +84,6 @@ from .const import (
     OVR_EXTRA_BRIGHTNESS,
     OVR_EXTRA_COLOR_TEMP_KELVIN,
     OVR_EXTRAS,
-    SUN_SOURCE_BUILTIN,
-    SUN_SOURCE_CUSTOM,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -122,12 +122,11 @@ class NightLightManager:
         self.entry = entry
         data = {**entry.data, **entry.options}
         self.lights: list[str] = data[CONF_LIGHTS]
-        self.sun_source: str = data.get(CONF_SUN_SOURCE, SUN_SOURCE_BUILTIN)
         self.sun_entity: str = data.get(CONF_SUN_ENTITY, DEFAULT_SUN_ENTITY)
-        self.sunset_offset: int = data.get(CONF_SUNSET_OFFSET, DEFAULT_SUNSET_OFFSET)
-        self.sunrise_offset: int = data.get(
-            CONF_SUNRISE_OFFSET, DEFAULT_SUNRISE_OFFSET
-        )
+        self.start_mode: str = data.get(CONF_START_MODE, ANCHOR_SUNSET)
+        self.start_offset: int = data.get(CONF_START_OFFSET, DEFAULT_START_OFFSET)
+        self.end_mode: str = data.get(CONF_END_MODE, ANCHOR_SUNRISE)
+        self.end_offset: int = data.get(CONF_END_OFFSET, DEFAULT_END_OFFSET)
         self.trigger_time: str = data[CONF_TRIGGER_TIME]
         self.end_time: str = data.get(CONF_END_TIME, DEFAULT_END_TIME)
         self.extras: list[dict] = [
@@ -186,52 +185,24 @@ class NightLightManager:
         )
 
     def start(self) -> None:
-        """Schedule the daily trigger (fixed, builtin sun or custom entity)."""
-        if self.sun_source == SUN_SOURCE_BUILTIN:
-            offset = timedelta(minutes=self.sunset_offset)
-            self._unsub_time = async_track_sunset(
-                self.hass, self._async_sunset_trigger, offset=offset
-            )
-            _LOGGER.info(
-                "Auto night light scheduled at sunset %+d min (builtin sun) for %s",
-                self.sunset_offset,
-                self.lights,
-            )
-        elif self.sun_source == SUN_SOURCE_CUSTOM:
-            self._schedule_custom_sunset()
+        """Schedule the daily trigger at the night-start anchor."""
+        self._schedule_trigger()
+        if self._uses_custom_sun_entity():
             self._unsub_sun = async_track_state_change_event(
                 self.hass, [self.sun_entity], self._async_sun_entity_changed
-            )
-            _LOGGER.info(
-                "Auto night light scheduled via custom sun entity %s for %s",
-                self.sun_entity,
-                self.lights,
-            )
-        else:
-            hour, minute, *_ = (int(p) for p in self.trigger_time.split(":"))
-            self._unsub_time = async_track_time_change(
-                self.hass,
-                self._async_scheduled_trigger,
-                hour=hour,
-                minute=minute,
-                second=0,
-            )
-            _LOGGER.info(
-                "Auto night light scheduled at %02d:%02d for %s",
-                hour,
-                minute,
-                self.lights,
             )
         if self.turn_on_listen:
             self._unsub_state = async_track_state_change_event(
                 self.hass, self.lights, self._async_light_state_changed
             )
-            _LOGGER.info(
-                "Turn-on listener active, night window %s -> %s (sun_source=%s)",
-                self.trigger_time,
-                self.end_time,
-                self.sun_source,
-            )
+        _LOGGER.info(
+            "Auto night light started for %s (start=%s/%s, end=%s/%s)",
+            self.lights,
+            self.start_mode,
+            self.trigger_time,
+            self.end_mode,
+            self.end_time,
+        )
 
     def stop(self) -> None:
         """Cancel the schedule and the listeners."""
@@ -242,86 +213,112 @@ class NightLightManager:
         self._unsub_state = None
         self._unsub_sun = None
 
-    def _custom_sun_times(self) -> tuple | None:
-        """Read (sunset, sunrise) datetimes from the custom sun entity."""
-        state = self.hass.states.get(self.sun_entity)
-        if state is None:
-            return None
-        sunset = dt_util.parse_datetime(
-            state.attributes.get("next_setting", "")
-        )
-        sunrise = dt_util.parse_datetime(
-            state.attributes.get("next_rising", "")
-        )
-        if sunset is None or sunrise is None:
-            return None
-        return (sunset, sunrise)
+    def _uses_custom_sun_entity(self) -> bool:
+        """Return True if any anchor relies on a non-default sun entity."""
+        if self.sun_entity == DEFAULT_SUN_ENTITY:
+            return False
+        return self.start_mode != ANCHOR_FIXED or self.end_mode != ANCHOR_FIXED
 
-    def _schedule_custom_sunset(self) -> None:
-        """Schedule the trigger at next_setting + offset of the custom entity."""
+    def _sun_dt(self, event_attr: str, sun_event: str, date) -> datetime | None:
+        """Resolve a sun event datetime.
+
+        非默认实体读其 next_setting/next_rising 属性；
+        默认 sun.sun（或属性缺失回退）用 HA 天文计算。
+        """
+        if self.sun_entity != DEFAULT_SUN_ENTITY:
+            state = self.hass.states.get(self.sun_entity)
+            if state is not None:
+                value = dt_util.parse_datetime(state.attributes.get(event_attr, ""))
+                if value is not None:
+                    return value
+            _LOGGER.warning(
+                "%s missing %s, falling back to astral calculation",
+                self.sun_entity,
+                event_attr,
+            )
+        try:
+            return get_astral_event_date(self.hass, sun_event, date)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Sun event %s unavailable: %s", sun_event, err)
+            return None
+
+    def _anchor_time(self, mode: str, fixed: str, offset: int):
+        """Resolve one anchor's time-of-day for mode resolution."""
+        if mode == ANCHOR_FIXED:
+            return dt_util.parse_time(fixed)
+        event_attr = "next_setting" if mode == ANCHOR_SUNSET else "next_rising"
+        sun_event = SUN_EVENT_SUNSET if mode == ANCHOR_SUNSET else SUN_EVENT_SUNRISE
+        value = self._sun_dt(event_attr, sun_event, dt_util.now().date())
+        if value is None:
+            return dt_util.parse_time(fixed)
+        return dt_util.as_local(value + timedelta(minutes=offset)).time()
+
+    def _next_start_dt(self) -> datetime | None:
+        """Compute the next occurrence datetime of the night-start anchor."""
+        now = dt_util.now()
+
+        def _fixed_next():
+            t = dt_util.parse_time(self.trigger_time)
+            if t is None:
+                return None
+            candidate = now.replace(
+                hour=t.hour, minute=t.minute, second=0, microsecond=0
+            )
+            if candidate <= now:
+                candidate += timedelta(days=1)
+            return candidate
+
+        if self.start_mode == ANCHOR_FIXED:
+            return _fixed_next()
+        event_attr = (
+            "next_setting" if self.start_mode == ANCHOR_SUNSET else "next_rising"
+        )
+        sun_event = (
+            SUN_EVENT_SUNSET if self.start_mode == ANCHOR_SUNSET else SUN_EVENT_SUNRISE
+        )
+        for days in (0, 1):
+            date = (now + timedelta(days=days)).date()
+            value = self._sun_dt(event_attr, sun_event, date)
+            if value is None:
+                break
+            candidate = dt_util.as_local(value) + timedelta(
+                minutes=self.start_offset
+            )
+            if candidate > now:
+                return candidate
+        _LOGGER.warning("Sun-based start anchor unavailable, using fixed time")
+        return _fixed_next()
+
+    def _schedule_trigger(self) -> None:
+        """(Re)schedule the daily trigger at the night-start anchor."""
         if self._unsub_time is not None:
             self._unsub_time()
             self._unsub_time = None
-        times = self._custom_sun_times()
-        if times is None:
-            _LOGGER.warning(
-                "%s missing next_setting/next_rising, custom trigger not scheduled",
-                self.sun_entity,
-            )
+        when = self._next_start_dt()
+        if when is None:
+            _LOGGER.error("Cannot schedule trigger: invalid trigger time")
             return
-        when = times[0] + timedelta(minutes=self.sunset_offset)
         self._unsub_time = async_track_point_in_time(
-            self.hass, self._async_custom_sunset_trigger, when
+            self.hass, self._async_anchor_trigger, when
         )
-        _LOGGER.info("Custom sun trigger scheduled at %s", when)
+        _LOGGER.info("Night light trigger scheduled at %s", when)
 
-    async def _async_custom_sunset_trigger(self, _now) -> None:
-        """Fire at custom sunset + offset, then schedule the next round."""
-        await self.async_trigger(reason="sunset")
-        self._schedule_custom_sunset()
+    async def _async_anchor_trigger(self, _now) -> None:
+        """Fire at the night-start anchor, then schedule the next round."""
+        await self.async_trigger(reason="anchor")
+        self._schedule_trigger()
 
     async def _async_sun_entity_changed(self, _event) -> None:
         """Reschedule when the custom sun entity updates its times."""
-        self._schedule_custom_sunset()
+        self._schedule_trigger()
 
     def _night_anchor_times(self) -> tuple:
-        """Resolve (night start, night end) anchor times.
-
-        内置 sun 时用天文计算当日日落/日出，自定义实体时读其
-        next_setting/next_rising 属性；均叠加各自偏移。
-        失败时回退到固定时间。
-        """
-        sunset = sunrise = None
-        if self.sun_source == SUN_SOURCE_BUILTIN:
-            try:
-                today = dt_util.now().date()
-                sunset = get_astral_event_date(self.hass, SUN_EVENT_SUNSET, today)
-                sunrise = get_astral_event_date(self.hass, SUN_EVENT_SUNRISE, today)
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.warning(
-                    "Builtin sun events unavailable (%s), using fixed times", err
-                )
-        elif self.sun_source == SUN_SOURCE_CUSTOM:
-            times = self._custom_sun_times()
-            if times is not None:
-                sunset, sunrise = times
-            else:
-                _LOGGER.warning(
-                    "%s missing next_setting/next_rising, using fixed times",
-                    self.sun_entity,
-                )
-        if sunset is not None and sunrise is not None:
-            return (
-                dt_util.as_local(
-                    sunset + timedelta(minutes=self.sunset_offset)
-                ).time(),
-                dt_util.as_local(
-                    sunrise + timedelta(minutes=self.sunrise_offset)
-                ).time(),
-            )
+        """Resolve (night start, night end) anchor times-of-day."""
         return (
-            dt_util.parse_time(self.trigger_time),
-            dt_util.parse_time(self.end_time),
+            self._anchor_time(
+                self.start_mode, self.trigger_time, self.start_offset
+            ),
+            self._anchor_time(self.end_mode, self.end_time, self.end_offset),
         )
 
     def current_mode(self) -> str | None:
@@ -394,14 +391,6 @@ class NightLightManager:
                 self._async_process_light(entity_id, brightness, kelvin)
             ),
         )
-
-    async def _async_scheduled_trigger(self, _now) -> None:
-        """Entry point for the scheduled time trigger."""
-        await self.async_trigger(reason="schedule")
-
-    async def _async_sunset_trigger(self) -> None:
-        """Entry point for the sunset trigger (sun integration)."""
-        await self.async_trigger(reason="sunset")
 
     async def async_trigger(self, reason: str = "manual") -> None:
         """Run one check-and-set round for all lights."""
