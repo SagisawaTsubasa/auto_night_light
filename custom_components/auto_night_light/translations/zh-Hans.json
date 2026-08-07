@@ -3,30 +3,50 @@
     "step": {
       "user": {
         "title": "时间设置",
+        "description": "夜间时段的时间来源与锚点时间。每个设置的时间是一个锚点：从该时刻起生效，直到下一个锚点。",
         "data": {
-          "use_sun": "使用日出日落（内置 sun 集成）",
-          "sun_offset": "日出日落偏移（分钟，负数=提前）",
-          "trigger_time": "夜间开始时间（启用日出日落时忽略）",
-          "end_time": "夜间结束/日间开始时间（启用日出日落时忽略）",
-          "extra_enabled": "启用额外时段",
-          "extra_start": "额外时段开始时间（持续到下一个时间点）",
-          "day_enabled": "夜间结束后应用日间参数"
+          "sun_source": "夜间时间来源",
+          "sun_entity": "自定义日出日落实体（需含 next_rising / next_setting 属性）",
+          "sunset_offset": "日落偏移（分钟，负数=提前）",
+          "sunrise_offset": "日出偏移（分钟，负数=提前）",
+          "trigger_time": "夜间开始时间（来源为固定时间时生效）",
+          "end_time": "夜间结束/日间开始时间（来源为固定时间时生效）",
+          "day_enabled": "夜间结束后应用日间参数",
+          "extra_enabled": "启用额外时段"
+        }
+      },
+      "extra_count": {
+        "title": "额外时段",
+        "data": {
+          "extra_count": "额外时段数量（最多 5 个）"
+        }
+      },
+      "extra_period": {
+        "title": "额外时段（{position}）",
+        "description": "额外时段是一个单时间锚点：从开始时间起生效，持续到下一个锚点（如夜间开始）。",
+        "data": {
+          "name": "名称（可选，仅用于显示）",
+          "start": "开始时间",
+          "brightness": "亮度（%）",
+          "color_temp_kelvin": "色温"
         }
       },
       "lights": {
         "title": "选择灯具",
         "data": {
-          "lights": "灯具实体",
-          "custom_per_light": "为单个灯具设置不同参数（额外设置）"
+          "lights": "灯具实体"
         }
+      },
+      "lights_extra": {
+        "title": "逐灯额外设置",
+        "description": "为每盏灯选择是否使用单独参数，只有打开的灯才会出现对应的设置页面。",
+        "data": {}
       },
       "settings": {
         "title": "各时段参数",
         "data": {
           "brightness": "夜间亮度（%）",
           "color_temp_kelvin": "夜间色温",
-          "extra_brightness": "额外时段亮度（%）",
-          "extra_color_temp_kelvin": "额外时段色温",
           "day_brightness": "日间亮度（%）",
           "day_color_temp_kelvin": "日间色温",
           "tolerance_brightness": "亮度容差（%）",
@@ -39,13 +59,11 @@
       },
       "per_light": {
         "title": "逐灯参数覆盖（{position}）",
-        "description": "灯具：`{entity}`。勾选自定义参数后，此灯将使用下列数值替代全局设定。",
+        "description": "灯具：`{entity}`。字段顺序：夜间、日间（若启用），之后每个额外时段一对亮度/色温（extra_0 = 时段 1，依此类推）。",
         "data": {
           "ovr_enable": "为此灯使用自定义参数",
           "brightness": "夜间亮度（%）",
           "color_temp_kelvin": "夜间色温",
-          "extra_brightness": "额外时段亮度（%）",
-          "extra_color_temp_kelvin": "额外时段色温",
           "day_brightness": "日间亮度（%）",
           "day_color_temp_kelvin": "日间色温"
         }
@@ -59,30 +77,50 @@
     "step": {
       "init": {
         "title": "时间设置",
+        "description": "夜间时段的时间来源与锚点时间。每个设置的时间是一个锚点：从该时刻起生效，直到下一个锚点。",
         "data": {
-          "use_sun": "使用日出日落（内置 sun 集成）",
-          "sun_offset": "日出日落偏移（分钟，负数=提前）",
-          "trigger_time": "夜间开始时间（启用日出日落时忽略）",
-          "end_time": "夜间结束/日间开始时间（启用日出日落时忽略）",
-          "extra_enabled": "启用额外时段",
-          "extra_start": "额外时段开始时间（持续到下一个时间点）",
-          "day_enabled": "夜间结束后应用日间参数"
+          "sun_source": "夜间时间来源",
+          "sun_entity": "自定义日出日落实体（需含 next_rising / next_setting 属性）",
+          "sunset_offset": "日落偏移（分钟，负数=提前）",
+          "sunrise_offset": "日出偏移（分钟，负数=提前）",
+          "trigger_time": "夜间开始时间（来源为固定时间时生效）",
+          "end_time": "夜间结束/日间开始时间（来源为固定时间时生效）",
+          "day_enabled": "夜间结束后应用日间参数",
+          "extra_enabled": "启用额外时段"
+        }
+      },
+      "extra_count": {
+        "title": "额外时段",
+        "data": {
+          "extra_count": "额外时段数量（最多 5 个）"
+        }
+      },
+      "extra_period": {
+        "title": "额外时段（{position}）",
+        "description": "额外时段是一个单时间锚点：从开始时间起生效，持续到下一个锚点（如夜间开始）。",
+        "data": {
+          "name": "名称（可选，仅用于显示）",
+          "start": "开始时间",
+          "brightness": "亮度（%）",
+          "color_temp_kelvin": "色温"
         }
       },
       "lights": {
         "title": "选择灯具",
         "data": {
-          "lights": "灯具实体",
-          "custom_per_light": "为单个灯具设置不同参数（额外设置）"
+          "lights": "灯具实体"
         }
+      },
+      "lights_extra": {
+        "title": "逐灯额外设置",
+        "description": "为每盏灯选择是否使用单独参数，只有打开的灯才会出现对应的设置页面。",
+        "data": {}
       },
       "settings": {
         "title": "各时段参数",
         "data": {
           "brightness": "夜间亮度（%）",
           "color_temp_kelvin": "夜间色温",
-          "extra_brightness": "额外时段亮度（%）",
-          "extra_color_temp_kelvin": "额外时段色温",
           "day_brightness": "日间亮度（%）",
           "day_color_temp_kelvin": "日间色温",
           "tolerance_brightness": "亮度容差（%）",
@@ -95,13 +133,11 @@
       },
       "per_light": {
         "title": "逐灯参数覆盖（{position}）",
-        "description": "灯具：`{entity}`。勾选自定义参数后，此灯将使用下列数值替代全局设定。",
+        "description": "灯具：`{entity}`。字段顺序：夜间、日间（若启用），之后每个额外时段一对亮度/色温（extra_0 = 时段 1，依此类推）。",
         "data": {
           "ovr_enable": "为此灯使用自定义参数",
           "brightness": "夜间亮度（%）",
           "color_temp_kelvin": "夜间色温",
-          "extra_brightness": "额外时段亮度（%）",
-          "extra_color_temp_kelvin": "额外时段色温",
           "day_brightness": "日间亮度（%）",
           "day_color_temp_kelvin": "日间色温"
         }
@@ -109,6 +145,15 @@
     },
     "error": {
       "no_lights": "请至少选择一盏灯"
+    }
+  },
+  "selector": {
+    "sun_source": {
+      "options": {
+        "none": "固定时间",
+        "builtin": "内置 sun 集成",
+        "custom": "自定义实体"
+      }
     }
   }
 }

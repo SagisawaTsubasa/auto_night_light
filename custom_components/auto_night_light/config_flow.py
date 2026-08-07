@@ -13,6 +13,10 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+    TextSelector,
     TimeSelector,
 )
 
@@ -24,20 +28,21 @@ from .const import (
     CONF_DAY_COLOR_TEMP_KELVIN,
     CONF_DAY_ENABLED,
     CONF_END_TIME,
-    CONF_EXTRA_BRIGHTNESS,
-    CONF_EXTRA_COLOR_TEMP_KELVIN,
+    CONF_EXTRA_COUNT,
     CONF_EXTRA_ENABLED,
-    CONF_EXTRA_START,
+    CONF_EXTRAS,
     CONF_LIGHTS,
     CONF_ONLY_WHEN_ON,
     CONF_OVERRIDES,
     CONF_SETTLE_DELAY,
-    CONF_SUN_OFFSET,
+    CONF_SUN_ENTITY,
+    CONF_SUN_SOURCE,
+    CONF_SUNRISE_OFFSET,
+    CONF_SUNSET_OFFSET,
     CONF_TOLERANCE_BRIGHTNESS,
     CONF_TOLERANCE_KELVIN,
     CONF_TRIGGER_TIME,
     CONF_TURN_ON_LISTEN,
-    CONF_USE_SUN,
     CONF_VERIFY_DELAY,
     DEFAULT_BRIGHTNESS,
     DEFAULT_COLOR_TEMP_KELVIN,
@@ -48,18 +53,28 @@ from .const import (
     DEFAULT_EXTRA_COLOR_TEMP_KELVIN,
     DEFAULT_EXTRA_START,
     DEFAULT_SETTLE_DELAY,
-    DEFAULT_SUN_OFFSET,
+    DEFAULT_SUN_ENTITY,
+    DEFAULT_SUNRISE_OFFSET,
+    DEFAULT_SUNSET_OFFSET,
     DEFAULT_TOLERANCE_BRIGHTNESS,
     DEFAULT_TOLERANCE_KELVIN,
     DEFAULT_TURN_ON_LISTEN,
     DEFAULT_VERIFY_DELAY,
     DOMAIN,
+    EXTRA_BRIGHTNESS,
+    EXTRA_COLOR_TEMP_KELVIN,
+    EXTRA_NAME,
+    EXTRA_START,
+    MAX_EXTRA_PERIODS,
     OVR_BRIGHTNESS,
     OVR_COLOR_TEMP_KELVIN,
     OVR_DAY_BRIGHTNESS,
     OVR_DAY_COLOR_TEMP_KELVIN,
     OVR_EXTRA_BRIGHTNESS,
     OVR_EXTRA_COLOR_TEMP_KELVIN,
+    OVR_EXTRAS,
+    SUN_SOURCE_BUILTIN,
+    SUN_SOURCES,
 )
 
 OVR_ENABLE = "ovr_enable"
@@ -83,6 +98,15 @@ def _kelvin_selector(key: str, default: int) -> tuple:
     )
 
 
+def _offset_selector(key: str, default: int) -> tuple:
+    return vol.Required(key, default=default), NumberSelector(
+        NumberSelectorConfig(
+            min=-120, max=120, step=5, unit_of_measurement="min",
+            mode=NumberSelectorMode.SLIDER,
+        )
+    )
+
+
 def _add_period_fields(
     schema: dict, b_key: str, k_key: str, defaults: dict,
     def_b: int, def_k: int,
@@ -95,21 +119,33 @@ def _add_period_fields(
 
 
 def _time_schema(defaults: dict) -> vol.Schema:
-    """Step 1 schema: period times, sun integration toggle, extra/day toggles."""
+    """Step 1: base period times, sun source and offsets, extra/day toggles."""
+    sunset_marker, sunset_sel = _offset_selector(
+        CONF_SUNSET_OFFSET, defaults.get(CONF_SUNSET_OFFSET, DEFAULT_SUNSET_OFFSET)
+    )
+    sunrise_marker, sunrise_sel = _offset_selector(
+        CONF_SUNRISE_OFFSET, defaults.get(CONF_SUNRISE_OFFSET, DEFAULT_SUNRISE_OFFSET)
+    )
     return vol.Schema(
         {
             vol.Required(
-                CONF_USE_SUN, default=defaults.get(CONF_USE_SUN, False)
-            ): BooleanSelector(),
-            vol.Required(
-                CONF_SUN_OFFSET,
-                default=defaults.get(CONF_SUN_OFFSET, DEFAULT_SUN_OFFSET),
-            ): NumberSelector(
-                NumberSelectorConfig(
-                    min=-120, max=120, step=5, unit_of_measurement="min",
-                    mode=NumberSelectorMode.SLIDER,
+                CONF_SUN_SOURCE,
+                default=defaults.get(CONF_SUN_SOURCE, SUN_SOURCE_BUILTIN),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=SUN_SOURCES,
+                    mode=SelectSelectorMode.DROPDOWN,
+                    translation_key="sun_source",
                 )
             ),
+            vol.Required(
+                CONF_SUN_ENTITY,
+                default=defaults.get(CONF_SUN_ENTITY, DEFAULT_SUN_ENTITY),
+            ): EntitySelector(
+                EntitySelectorConfig(domain=["sun", "sensor"])
+            ),
+            sunset_marker: sunset_sel,
+            sunrise_marker: sunrise_sel,
             vol.Required(
                 CONF_TRIGGER_TIME, default=defaults.get(CONF_TRIGGER_TIME, "22:00:00")
             ): TimeSelector(),
@@ -117,22 +153,55 @@ def _time_schema(defaults: dict) -> vol.Schema:
                 CONF_END_TIME, default=defaults.get(CONF_END_TIME, DEFAULT_END_TIME)
             ): TimeSelector(),
             vol.Required(
-                CONF_EXTRA_ENABLED,
-                default=defaults.get(CONF_EXTRA_ENABLED, False),
+                CONF_DAY_ENABLED, default=defaults.get(CONF_DAY_ENABLED, False)
             ): BooleanSelector(),
             vol.Required(
-                CONF_EXTRA_START,
-                default=defaults.get(CONF_EXTRA_START, DEFAULT_EXTRA_START),
-            ): TimeSelector(),
-            vol.Required(
-                CONF_DAY_ENABLED, default=defaults.get(CONF_DAY_ENABLED, False)
+                CONF_EXTRA_ENABLED,
+                default=defaults.get(
+                    CONF_EXTRA_ENABLED, bool(defaults.get(CONF_EXTRAS))
+                ),
             ): BooleanSelector(),
         }
     )
 
 
+def _extra_count_schema(defaults: dict) -> vol.Schema:
+    """Extra periods: how many."""
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_EXTRA_COUNT,
+                default=defaults.get(
+                    CONF_EXTRA_COUNT, max(1, len(defaults.get(CONF_EXTRAS, [])))
+                ),
+            ): NumberSelector(
+                NumberSelectorConfig(
+                    min=1, max=MAX_EXTRA_PERIODS, mode=NumberSelectorMode.SLIDER
+                )
+            ),
+        }
+    )
+
+
+def _extra_period_schema(defaults: dict) -> vol.Schema:
+    """One extra period: optional name, anchor start time, brightness/kelvin."""
+    schema: dict = {
+        vol.Optional(
+            EXTRA_NAME, default=defaults.get(EXTRA_NAME, "")
+        ): TextSelector(),
+        vol.Required(
+            EXTRA_START, default=defaults.get(EXTRA_START, DEFAULT_EXTRA_START)
+        ): TimeSelector(),
+    }
+    _add_period_fields(
+        schema, EXTRA_BRIGHTNESS, EXTRA_COLOR_TEMP_KELVIN,
+        defaults, DEFAULT_EXTRA_BRIGHTNESS, DEFAULT_EXTRA_COLOR_TEMP_KELVIN,
+    )
+    return vol.Schema(schema)
+
+
 def _lights_schema(defaults: dict) -> vol.Schema:
-    """Step 2 schema: light selection + per-light extra settings toggle."""
+    """Light selection."""
     return vol.Schema(
         {
             vol.Required(
@@ -140,30 +209,27 @@ def _lights_schema(defaults: dict) -> vol.Schema:
             ): EntitySelector(
                 EntitySelectorConfig(domain="light", multiple=True)
             ),
-            vol.Required(
-                CONF_CUSTOM_PER_LIGHT,
-                default=defaults.get(
-                    CONF_CUSTOM_PER_LIGHT, bool(defaults.get(CONF_OVERRIDES))
-                ),
-            ): BooleanSelector(),
         }
     )
 
 
-def _settings_schema(
-    defaults: dict, extra_enabled: bool, day_enabled: bool
-) -> vol.Schema:
-    """Step 3 schema: per-period brightness/kelvin plus advanced parameters."""
+def _lights_extra_schema(lights: list[str], custom: list[str]) -> vol.Schema:
+    """One toggle per selected light: configure it separately or not."""
+    return vol.Schema(
+        {
+            vol.Required(light, default=light in custom): BooleanSelector()
+            for light in lights
+        }
+    )
+
+
+def _settings_schema(defaults: dict, day_enabled: bool) -> vol.Schema:
+    """Base period brightness/kelvin plus advanced parameters."""
     schema: dict = {}
     _add_period_fields(
         schema, CONF_BRIGHTNESS, CONF_COLOR_TEMP_KELVIN,
         defaults, DEFAULT_BRIGHTNESS, DEFAULT_COLOR_TEMP_KELVIN,
     )
-    if extra_enabled:
-        _add_period_fields(
-            schema, CONF_EXTRA_BRIGHTNESS, CONF_EXTRA_COLOR_TEMP_KELVIN,
-            defaults, DEFAULT_EXTRA_BRIGHTNESS, DEFAULT_EXTRA_COLOR_TEMP_KELVIN,
-        )
     if day_enabled:
         _add_period_fields(
             schema, CONF_DAY_BRIGHTNESS, CONF_DAY_COLOR_TEMP_KELVIN,
@@ -220,9 +286,9 @@ def _settings_schema(
 
 
 def _override_schema(
-    settings: dict, current: dict | None, extra_enabled: bool, day_enabled: bool
+    settings: dict, current: dict | None, extras: list[dict], day_enabled: bool
 ) -> vol.Schema:
-    """Per-light override schema, prefilled from current override or globals."""
+    """Per-light override schema: night + day + every extra period."""
     current = current or {}
     enabled = bool(current)
     schema: dict = {vol.Required(OVR_ENABLE, default=enabled): BooleanSelector()}
@@ -230,13 +296,6 @@ def _override_schema(
         schema, OVR_BRIGHTNESS, OVR_COLOR_TEMP_KELVIN,
         current, settings[CONF_BRIGHTNESS], settings[CONF_COLOR_TEMP_KELVIN],
     )
-    if extra_enabled:
-        _add_period_fields(
-            schema, OVR_EXTRA_BRIGHTNESS, OVR_EXTRA_COLOR_TEMP_KELVIN,
-            current,
-            settings.get(CONF_EXTRA_BRIGHTNESS, DEFAULT_EXTRA_BRIGHTNESS),
-            settings.get(CONF_EXTRA_COLOR_TEMP_KELVIN, DEFAULT_EXTRA_COLOR_TEMP_KELVIN),
-        )
     if day_enabled:
         _add_period_fields(
             schema, OVR_DAY_BRIGHTNESS, OVR_DAY_COLOR_TEMP_KELVIN,
@@ -244,118 +303,242 @@ def _override_schema(
             settings.get(CONF_DAY_BRIGHTNESS, DEFAULT_DAY_BRIGHTNESS),
             settings.get(CONF_DAY_COLOR_TEMP_KELVIN, DEFAULT_DAY_COLOR_TEMP_KELVIN),
         )
+    ovr_extras = current.get(OVR_EXTRAS, {})
+    for i, extra in enumerate(extras):
+        cur = ovr_extras.get(str(i), {})
+        _add_period_fields(
+            schema, f"extra_{i}_brightness", f"extra_{i}_kelvin",
+            cur,
+            extra.get(EXTRA_BRIGHTNESS, DEFAULT_EXTRA_BRIGHTNESS),
+            extra.get(EXTRA_COLOR_TEMP_KELVIN, DEFAULT_EXTRA_COLOR_TEMP_KELVIN),
+        )
     return vol.Schema(schema)
+
+
+def _extra_label(extra: dict, idx: int) -> str:
+    """Display label for an extra period."""
+    return extra.get(EXTRA_NAME) or f"{idx + 1}"
+
+
+async def _extra_period_step(flow, user_input, next_step):
+    """Shared loop over extra period pages for config and options flows."""
+    if user_input is not None:
+        extra = {
+            EXTRA_NAME: user_input.get(EXTRA_NAME, ""),
+            EXTRA_START: user_input[EXTRA_START],
+            EXTRA_BRIGHTNESS: user_input[EXTRA_BRIGHTNESS],
+            EXTRA_COLOR_TEMP_KELVIN: user_input[EXTRA_COLOR_TEMP_KELVIN],
+        }
+        if flow._idx < len(flow._extras):
+            flow._extras[flow._idx] = extra
+        else:
+            flow._extras.append(extra)
+        flow._idx += 1
+
+    if flow._idx >= flow._extra_count:
+        return await next_step()
+
+    current = flow._extras[flow._idx] if flow._idx < len(flow._extras) else {}
+    return flow.async_show_form(
+        step_id="extra_period",
+        data_schema=_extra_period_schema(current),
+        description_placeholders={
+            "position": f"{flow._idx + 1}/{flow._extra_count}",
+        },
+    )
 
 
 async def _per_light_step(flow, user_input, finish):
     """Shared per-light override step logic for config and options flows."""
     if user_input is not None:
-        entity = flow._lights[flow._idx]
+        entity = flow._custom_lights[flow._idx]
         if user_input.get(OVR_ENABLE):
             ovr = {
                 OVR_BRIGHTNESS: user_input[OVR_BRIGHTNESS],
                 OVR_COLOR_TEMP_KELVIN: user_input[OVR_COLOR_TEMP_KELVIN],
             }
-            if flow._extra_enabled:
-                ovr[OVR_EXTRA_BRIGHTNESS] = user_input[OVR_EXTRA_BRIGHTNESS]
-                ovr[OVR_EXTRA_COLOR_TEMP_KELVIN] = user_input[OVR_EXTRA_COLOR_TEMP_KELVIN]
             if flow._day_enabled:
                 ovr[OVR_DAY_BRIGHTNESS] = user_input[OVR_DAY_BRIGHTNESS]
                 ovr[OVR_DAY_COLOR_TEMP_KELVIN] = user_input[OVR_DAY_COLOR_TEMP_KELVIN]
+            ovr_extras = {}
+            for i in range(len(flow._extras)):
+                ovr_extras[str(i)] = {
+                    OVR_EXTRA_BRIGHTNESS: user_input[f"extra_{i}_brightness"],
+                    OVR_EXTRA_COLOR_TEMP_KELVIN: user_input[f"extra_{i}_kelvin"],
+                }
+            if ovr_extras:
+                ovr[OVR_EXTRAS] = ovr_extras
             flow._overrides[entity] = ovr
         else:
             flow._overrides.pop(entity, None)
         flow._idx += 1
 
-    if flow._idx >= len(flow._lights):
+    if flow._idx >= len(flow._custom_lights):
         return await finish()
 
-    entity = flow._lights[flow._idx]
+    entity = flow._custom_lights[flow._idx]
     return flow.async_show_form(
         step_id="per_light",
         data_schema=_override_schema(
             flow._settings,
             flow._overrides.get(entity),
-            flow._extra_enabled,
+            flow._extras,
             flow._day_enabled,
         ),
         description_placeholders={
             "entity": entity,
-            "position": f"{flow._idx + 1}/{len(flow._lights)}",
+            "position": f"{flow._idx + 1}/{len(flow._custom_lights)}",
         },
     )
 
 
-class AutoNightLightConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle the initial config flow."""
+class _FlowMixin:
+    """Shared step logic for the config and options flows."""
 
-    VERSION = 3
-
-    def __init__(self) -> None:
-        """Store intermediate data between steps."""
-        self._times: dict = {}
-        self._lights: list[str] = []
-        self._custom_per_light: bool = False
-        self._settings: dict = {}
-        self._overrides: dict[str, dict] = {}
-        self._idx: int = 0
-
-    @property
-    def _extra_enabled(self) -> bool:
-        return bool(self._times.get(CONF_EXTRA_ENABLED))
+    _times: dict
+    _extras: list[dict]
+    _extra_count: int
+    _lights: list[str]
+    _custom_lights: list[str]
+    _settings: dict
+    _overrides: dict[str, dict]
+    _idx: int
 
     @property
     def _day_enabled(self) -> bool:
         return bool(self._times.get(CONF_DAY_ENABLED))
 
-    async def async_step_user(self, user_input=None) -> ConfigFlowResult:
-        """Step 1: time settings (sun toggle, night window, extra period, day)."""
+    def _init_state(self) -> None:
+        self._times = {}
+        self._extras = []
+        self._extra_count = 0
+        self._lights = []
+        self._custom_lights = []
+        self._settings = {}
+        self._overrides = {}
+        self._idx = 0
+
+    async def _handle_time_step(self, user_input, step_id, defaults):
+        """Step 1: time settings."""
         if user_input is not None:
             self._times = user_input
-            return await self.async_step_lights()
-        return self.async_show_form(step_id="user", data_schema=_time_schema({}))
+            if user_input.get(CONF_EXTRA_ENABLED):
+                return await self._async_step_extra_count()
+            self._extras = []
+            return await self._async_step_lights()
+        return self.async_show_form(
+            step_id=step_id, data_schema=_time_schema(defaults)
+        )
 
-    async def async_step_lights(self, user_input=None) -> ConfigFlowResult:
-        """Step 2: pick light entities and whether to configure per-light extras."""
+    async def _async_step_extra_count(self, user_input=None, defaults=None):
+        """Step 2 (optional): how many extra periods."""
+        if user_input is not None:
+            self._extra_count = int(user_input[CONF_EXTRA_COUNT])
+            self._extras = self._extras[: self._extra_count]
+            self._idx = 0
+            return await self._async_step_extra_period()
+        return self.async_show_form(
+            step_id="extra_count",
+            data_schema=_extra_count_schema(defaults or {}),
+        )
+
+    async def _async_step_extra_period(self, user_input=None):
+        """Step 3 (optional, loop): one page per extra period."""
+        return await _extra_period_step(self, user_input, self._async_step_lights)
+
+    async def _async_step_lights(self, user_input=None, defaults=None):
+        """Step 4: pick light entities."""
         errors = {}
         if user_input is not None:
             if user_input.get(CONF_LIGHTS):
                 self._lights = user_input[CONF_LIGHTS]
-                self._custom_per_light = user_input[CONF_CUSTOM_PER_LIGHT]
-                return await self.async_step_settings()
+                self._custom_lights = [
+                    light for light in self._custom_lights if light in self._lights
+                ]
+                return await self._async_step_lights_extra()
             errors["base"] = "no_lights"
         return self.async_show_form(
-            step_id="lights", data_schema=_lights_schema({}), errors=errors
+            step_id="lights",
+            data_schema=_lights_schema(defaults or {}),
+            errors=errors,
         )
 
-    async def async_step_settings(self, user_input=None) -> ConfigFlowResult:
-        """Step 3: per-period brightness/kelvin and advanced parameters."""
+    async def _async_step_lights_extra(self, user_input=None):
+        """Step 5: per-light toggle for custom parameters."""
+        if user_input is not None:
+            self._custom_lights = [
+                light for light in self._lights if user_input.get(light)
+            ]
+            return await self._async_step_settings()
+        return self.async_show_form(
+            step_id="lights_extra",
+            data_schema=_lights_extra_schema(self._lights, self._custom_lights),
+        )
+
+    async def _async_step_settings(self, user_input=None, defaults=None):
+        """Step 6: base period parameters and advanced settings."""
         if user_input is not None:
             self._settings = user_input
             self._idx = 0
-            if self._custom_per_light:
-                return await self.async_step_per_light()
+            if self._custom_lights:
+                return await self._async_step_per_light()
             return await self._finish()
         return self.async_show_form(
             step_id="settings",
-            data_schema=_settings_schema(
-                {}, self._extra_enabled, self._day_enabled
-            ),
+            data_schema=_settings_schema(defaults or {}, self._day_enabled),
         )
 
-    async def async_step_per_light(self, user_input=None) -> ConfigFlowResult:
-        """Step 4+: optional per-light overrides."""
+    async def _async_step_per_light(self, user_input=None):
+        """Step 7 (loop): per-light overrides for toggled lights only."""
         return await _per_light_step(self, user_input, self._finish)
 
-    async def _finish(self) -> ConfigFlowResult:
-        data = {
+    def _entry_data(self) -> dict:
+        return {
             **self._times,
+            CONF_EXTRA_COUNT: len(self._extras),
+            CONF_EXTRAS: self._extras,
             CONF_LIGHTS: self._lights,
-            CONF_CUSTOM_PER_LIGHT: self._custom_per_light,
+            CONF_CUSTOM_PER_LIGHT: self._custom_lights,
             **self._settings,
-            CONF_OVERRIDES: self._overrides,
+            CONF_OVERRIDES: {
+                k: v for k, v in self._overrides.items() if k in self._lights
+            },
         }
-        return self.async_create_entry(title="自动夜灯", data=data)
+
+
+class AutoNightLightConfigFlow(_FlowMixin, ConfigFlow, domain=DOMAIN):
+    """Handle the initial config flow."""
+
+    VERSION = 4
+
+    def __init__(self) -> None:
+        """Store intermediate data between steps."""
+        self._init_state()
+
+    async def async_step_user(self, user_input=None) -> ConfigFlowResult:
+        """Step 1: time settings."""
+        return await self._handle_time_step(user_input, "user", {})
+
+    async def async_step_extra_count(self, user_input=None) -> ConfigFlowResult:
+        return await self._async_step_extra_count(user_input)
+
+    async def async_step_extra_period(self, user_input=None) -> ConfigFlowResult:
+        return await self._async_step_extra_period(user_input)
+
+    async def async_step_lights(self, user_input=None) -> ConfigFlowResult:
+        return await self._async_step_lights(user_input)
+
+    async def async_step_lights_extra(self, user_input=None) -> ConfigFlowResult:
+        return await self._async_step_lights_extra(user_input)
+
+    async def async_step_settings(self, user_input=None) -> ConfigFlowResult:
+        return await self._async_step_settings(user_input)
+
+    async def async_step_per_light(self, user_input=None) -> ConfigFlowResult:
+        return await self._async_step_per_light(user_input)
+
+    async def _finish(self) -> ConfigFlowResult:
+        return self.async_create_entry(title="自动夜灯", data=self._entry_data())
 
     @staticmethod
     @callback
@@ -364,84 +547,44 @@ class AutoNightLightConfigFlow(ConfigFlow, domain=DOMAIN):
         return AutoNightLightOptionsFlow(config_entry)
 
 
-class AutoNightLightOptionsFlow(OptionsFlow):
-    """Allow re-editing times, lights, settings and per-light overrides."""
+class AutoNightLightOptionsFlow(_FlowMixin, OptionsFlow):
+    """Allow re-editing times, extras, lights, settings and per-light overrides."""
 
     def __init__(self, config_entry) -> None:
         """Store the config entry."""
         self._entry = config_entry
-        self._times: dict = {}
-        self._lights: list[str] = []
-        self._custom_per_light: bool = False
-        self._settings: dict = {}
-        self._overrides: dict[str, dict] = {}
-        self._idx: int = 0
+        self._init_state()
+        current = self._current
+        self._extras = [dict(e) for e in current.get(CONF_EXTRAS, [])]
+        self._extra_count = len(self._extras)
+        self._custom_lights = list(current.get(CONF_CUSTOM_PER_LIGHT, []))
+        self._overrides = dict(current.get(CONF_OVERRIDES, {}))
 
     @property
     def _current(self) -> dict:
         return {**self._entry.data, **self._entry.options}
 
-    @property
-    def _extra_enabled(self) -> bool:
-        return bool(self._times.get(CONF_EXTRA_ENABLED))
-
-    @property
-    def _day_enabled(self) -> bool:
-        return bool(self._times.get(CONF_DAY_ENABLED))
-
     async def async_step_init(self, user_input=None) -> ConfigFlowResult:
         """Step 1: time settings, prefilled with current values."""
-        if user_input is not None:
-            self._times = user_input
-            return await self.async_step_lights()
-        return self.async_show_form(
-            step_id="init", data_schema=_time_schema(self._current)
-        )
+        return await self._handle_time_step(user_input, "init", self._current)
+
+    async def async_step_extra_count(self, user_input=None) -> ConfigFlowResult:
+        return await self._async_step_extra_count(user_input, self._current)
+
+    async def async_step_extra_period(self, user_input=None) -> ConfigFlowResult:
+        return await self._async_step_extra_period(user_input)
 
     async def async_step_lights(self, user_input=None) -> ConfigFlowResult:
-        """Step 2: re-pick lights and per-light toggle, prefilled."""
-        errors = {}
-        current = self._current
-        if user_input is not None:
-            if user_input.get(CONF_LIGHTS):
-                self._lights = user_input[CONF_LIGHTS]
-                self._custom_per_light = user_input[CONF_CUSTOM_PER_LIGHT]
-                self._overrides = {
-                    k: v
-                    for k, v in current.get(CONF_OVERRIDES, {}).items()
-                    if k in self._lights
-                }
-                return await self.async_step_settings()
-            errors["base"] = "no_lights"
-        return self.async_show_form(
-            step_id="lights", data_schema=_lights_schema(current), errors=errors
-        )
+        return await self._async_step_lights(user_input, self._current)
+
+    async def async_step_lights_extra(self, user_input=None) -> ConfigFlowResult:
+        return await self._async_step_lights_extra(user_input)
 
     async def async_step_settings(self, user_input=None) -> ConfigFlowResult:
-        """Step 3: per-period parameters, prefilled with current values."""
-        if user_input is not None:
-            self._settings = user_input
-            self._idx = 0
-            if self._custom_per_light:
-                return await self.async_step_per_light()
-            return await self._finish()
-        return self.async_show_form(
-            step_id="settings",
-            data_schema=_settings_schema(
-                self._current, self._extra_enabled, self._day_enabled
-            ),
-        )
+        return await self._async_step_settings(user_input, self._current)
 
     async def async_step_per_light(self, user_input=None) -> ConfigFlowResult:
-        """Step 4+: optional per-light overrides."""
-        return await _per_light_step(self, user_input, self._finish)
+        return await self._async_step_per_light(user_input)
 
     async def _finish(self) -> ConfigFlowResult:
-        options = {
-            **self._times,
-            CONF_LIGHTS: self._lights,
-            CONF_CUSTOM_PER_LIGHT: self._custom_per_light,
-            **self._settings,
-            CONF_OVERRIDES: self._overrides,
-        }
-        return self.async_create_entry(title="", data=options)
+        return self.async_create_entry(title="", data=self._entry_data())

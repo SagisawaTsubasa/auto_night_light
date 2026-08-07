@@ -3,30 +3,50 @@
     "step": {
       "user": {
         "title": "Time settings",
+        "description": "Night period time source and anchor times. Each configured time is an anchor: it takes effect from that moment until the next anchor.",
         "data": {
-          "use_sun": "Use sunrise/sunset (built-in sun integration)",
-          "sun_offset": "Sunrise/sunset offset (minutes, negative = earlier)",
-          "trigger_time": "Night starts at (ignored when using sun)",
-          "end_time": "Daytime starts at / night ends (ignored when using sun)",
-          "extra_enabled": "Enable an extra time period",
-          "extra_start": "Extra period starts at (lasts until the next time point)",
-          "day_enabled": "Apply daytime settings after night ends"
+          "sun_source": "Night time source",
+          "sun_entity": "Custom sun entity (needs next_rising / next_setting attributes)",
+          "sunset_offset": "Sunset offset (minutes, negative = earlier)",
+          "sunrise_offset": "Sunrise offset (minutes, negative = earlier)",
+          "trigger_time": "Night starts at (used when source is fixed time)",
+          "end_time": "Night ends / daytime starts (used when source is fixed time)",
+          "day_enabled": "Apply daytime settings after night ends",
+          "extra_enabled": "Enable extra time periods"
+        }
+      },
+      "extra_count": {
+        "title": "Extra time periods",
+        "data": {
+          "extra_count": "Number of extra periods (max 5)"
+        }
+      },
+      "extra_period": {
+        "title": "Extra period ({position})",
+        "description": "An extra period is a single anchor time: its parameters apply from the start time until the next anchor (e.g. night start).",
+        "data": {
+          "name": "Name (optional, display only)",
+          "start": "Starts at",
+          "brightness": "Brightness (%)",
+          "color_temp_kelvin": "Color temperature"
         }
       },
       "lights": {
         "title": "Select lights",
         "data": {
-          "lights": "Light entities",
-          "custom_per_light": "Configure custom parameters per light (extra settings)"
+          "lights": "Light entities"
         }
+      },
+      "lights_extra": {
+        "title": "Per-light extra settings",
+        "description": "Enable custom parameters per light. Only enabled lights get their own settings page.",
+        "data": {}
       },
       "settings": {
         "title": "Period parameters",
         "data": {
           "brightness": "Night brightness (%)",
           "color_temp_kelvin": "Night color temperature",
-          "extra_brightness": "Extra period brightness (%)",
-          "extra_color_temp_kelvin": "Extra period color temperature",
           "day_brightness": "Daytime brightness (%)",
           "day_color_temp_kelvin": "Daytime color temperature",
           "tolerance_brightness": "Brightness tolerance (%)",
@@ -39,13 +59,11 @@
       },
       "per_light": {
         "title": "Per-light override ({position})",
-        "description": "Light: `{entity}`. Enable custom parameters to override the global values for this light only.",
+        "description": "Light: `{entity}`. Fields: night, daytime (if enabled), then one brightness/color-temperature pair per extra period (extra_0 = period 1, etc.).",
         "data": {
           "ovr_enable": "Use custom parameters for this light",
           "brightness": "Night brightness (%)",
           "color_temp_kelvin": "Night color temperature",
-          "extra_brightness": "Extra period brightness (%)",
-          "extra_color_temp_kelvin": "Extra period color temperature",
           "day_brightness": "Daytime brightness (%)",
           "day_color_temp_kelvin": "Daytime color temperature"
         }
@@ -59,30 +77,50 @@
     "step": {
       "init": {
         "title": "Time settings",
+        "description": "Night period time source and anchor times. Each configured time is an anchor: it takes effect from that moment until the next anchor.",
         "data": {
-          "use_sun": "Use sunrise/sunset (built-in sun integration)",
-          "sun_offset": "Sunrise/sunset offset (minutes, negative = earlier)",
-          "trigger_time": "Night starts at (ignored when using sun)",
-          "end_time": "Daytime starts at / night ends (ignored when using sun)",
-          "extra_enabled": "Enable an extra time period",
-          "extra_start": "Extra period starts at (lasts until the next time point)",
-          "day_enabled": "Apply daytime settings after night ends"
+          "sun_source": "Night time source",
+          "sun_entity": "Custom sun entity (needs next_rising / next_setting attributes)",
+          "sunset_offset": "Sunset offset (minutes, negative = earlier)",
+          "sunrise_offset": "Sunrise offset (minutes, negative = earlier)",
+          "trigger_time": "Night starts at (used when source is fixed time)",
+          "end_time": "Night ends / daytime starts (used when source is fixed time)",
+          "day_enabled": "Apply daytime settings after night ends",
+          "extra_enabled": "Enable extra time periods"
+        }
+      },
+      "extra_count": {
+        "title": "Extra time periods",
+        "data": {
+          "extra_count": "Number of extra periods (max 5)"
+        }
+      },
+      "extra_period": {
+        "title": "Extra period ({position})",
+        "description": "An extra period is a single anchor time: its parameters apply from the start time until the next anchor (e.g. night start).",
+        "data": {
+          "name": "Name (optional, display only)",
+          "start": "Starts at",
+          "brightness": "Brightness (%)",
+          "color_temp_kelvin": "Color temperature"
         }
       },
       "lights": {
         "title": "Select lights",
         "data": {
-          "lights": "Light entities",
-          "custom_per_light": "Configure custom parameters per light (extra settings)"
+          "lights": "Light entities"
         }
+      },
+      "lights_extra": {
+        "title": "Per-light extra settings",
+        "description": "Enable custom parameters per light. Only enabled lights get their own settings page.",
+        "data": {}
       },
       "settings": {
         "title": "Period parameters",
         "data": {
           "brightness": "Night brightness (%)",
           "color_temp_kelvin": "Night color temperature",
-          "extra_brightness": "Extra period brightness (%)",
-          "extra_color_temp_kelvin": "Extra period color temperature",
           "day_brightness": "Daytime brightness (%)",
           "day_color_temp_kelvin": "Daytime color temperature",
           "tolerance_brightness": "Brightness tolerance (%)",
@@ -95,13 +133,11 @@
       },
       "per_light": {
         "title": "Per-light override ({position})",
-        "description": "Light: `{entity}`. Enable custom parameters to override the global values for this light only.",
+        "description": "Light: `{entity}`. Fields: night, daytime (if enabled), then one brightness/color-temperature pair per extra period (extra_0 = period 1, etc.).",
         "data": {
           "ovr_enable": "Use custom parameters for this light",
           "brightness": "Night brightness (%)",
           "color_temp_kelvin": "Night color temperature",
-          "extra_brightness": "Extra period brightness (%)",
-          "extra_color_temp_kelvin": "Extra period color temperature",
           "day_brightness": "Daytime brightness (%)",
           "day_color_temp_kelvin": "Daytime color temperature"
         }
@@ -109,6 +145,15 @@
     },
     "error": {
       "no_lights": "Please select at least one light"
+    }
+  },
+  "selector": {
+    "sun_source": {
+      "options": {
+        "none": "Fixed times",
+        "builtin": "Built-in sun integration",
+        "custom": "Custom entity"
+      }
     }
   }
 }
