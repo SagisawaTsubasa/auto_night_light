@@ -433,7 +433,7 @@ class _FlowMixin:
         self._overrides = {}
         self._idx = 0
 
-    async def _handle_time_step(self, user_input, step_id, defaults):
+    async def _handle_time_step(self, user_input, step_id, defaults, suggest=None):
         """Step 1: time settings."""
         if user_input is not None:
             self._times = user_input
@@ -441,9 +441,10 @@ class _FlowMixin:
                 return await self._async_step_extra_count()
             self._extras = []
             return await self._async_step_lights()
-        return self.async_show_form(
-            step_id=step_id, data_schema=_time_schema(defaults)
-        )
+        schema = _time_schema(defaults)
+        if suggest is not None:
+            schema = self.add_suggested_values_to_schema(schema, suggest)
+        return self.async_show_form(step_id=step_id, data_schema=schema)
 
     async def _async_step_extra_count(self, user_input=None, defaults=None):
         """Step 2 (optional): how many extra periods."""
@@ -461,7 +462,7 @@ class _FlowMixin:
         """Step 3 (optional, loop): one page per extra period."""
         return await _extra_period_step(self, user_input, self._async_step_lights)
 
-    async def _async_step_lights(self, user_input=None, defaults=None):
+    async def _async_step_lights(self, user_input=None, defaults=None, suggest=None):
         """Step 4: pick light entities."""
         errors = {}
         if user_input is not None:
@@ -472,9 +473,12 @@ class _FlowMixin:
                 ]
                 return await self._async_step_lights_extra()
             errors["base"] = "no_lights"
+        schema = _lights_schema(defaults or {})
+        if suggest is not None:
+            schema = self.add_suggested_values_to_schema(schema, suggest)
         return self.async_show_form(
             step_id="lights",
-            data_schema=_lights_schema(defaults or {}),
+            data_schema=schema,
             errors=errors,
         )
 
@@ -591,7 +595,9 @@ class AutoNightLightOptionsFlow(_FlowMixin, OptionsFlow):
 
     async def async_step_init(self, user_input=None) -> ConfigFlowResult:
         """Step 1: time settings, prefilled with current values."""
-        return await self._handle_time_step(user_input, "init", self._current)
+        return await self._handle_time_step(
+            user_input, "init", self._current, suggest=self._current
+        )
 
     async def async_step_extra_count(self, user_input=None) -> ConfigFlowResult:
         return await self._async_step_extra_count(user_input, self._current)
@@ -600,7 +606,9 @@ class AutoNightLightOptionsFlow(_FlowMixin, OptionsFlow):
         return await self._async_step_extra_period(user_input)
 
     async def async_step_lights(self, user_input=None) -> ConfigFlowResult:
-        return await self._async_step_lights(user_input, self._current)
+        return await self._async_step_lights(
+            user_input, self._current, suggest=self._current
+        )
 
     async def async_step_lights_extra(self, user_input=None) -> ConfigFlowResult:
         return await self._async_step_lights_extra(user_input)
