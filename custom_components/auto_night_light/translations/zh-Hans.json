@@ -60,13 +60,27 @@
       },
       "per_light": {
         "title": "逐灯参数覆盖（{position}）",
-        "description": "灯具：{name}（`{entity}`）。字段顺序：夜间、日间（若启用），之后每个额外时段一对亮度/色温（extra_0 = 时段 1，依此类推）。",
+        "description": "灯具：{name}（`{entity}`）。为此灯单独设置各时段参数，替代全局设定。字段顺序：夜间、日间（若启用），之后每个额外时段一对亮度/色温（extra_0 = 时段 1，依此类推）。",
         "data": {
-          "ovr_enable": "为此灯使用自定义参数",
           "brightness": "夜间亮度（%）",
           "color_temp_kelvin": "夜间色温",
           "day_brightness": "日间亮度（%）",
           "day_color_temp_kelvin": "日间色温"
+        }
+      },
+      "reconfigure": {
+        "title": "时间设置",
+        "description": "夜间的开始和结束锚点可各自独立选择来源：固定时间、日落或日出，并分别设置偏移。例如：22:00 固定入夜，日出+15 分钟恢复日间。",
+        "data": {
+          "start_mode": "夜间开始方式",
+          "trigger_time": "夜间开始固定时间（方式为固定时间时生效）",
+          "start_offset": "夜间开始偏移（分钟，负数=提前）",
+          "end_mode": "夜间结束/日间开始方式",
+          "end_time": "夜间结束固定时间（方式为固定时间时生效）",
+          "end_offset": "夜间结束偏移（分钟，负数=提前）",
+          "sun_entity": "日出日落实体（默认内置 sun.sun；自定义实体需含 next_rising / next_setting 属性）",
+          "day_enabled": "夜间结束后应用日间参数",
+          "extra_enabled": "启用额外时段"
         }
       }
     },
@@ -135,9 +149,8 @@
       },
       "per_light": {
         "title": "逐灯参数覆盖（{position}）",
-        "description": "灯具：{name}（`{entity}`）。字段顺序：夜间、日间（若启用），之后每个额外时段一对亮度/色温（extra_0 = 时段 1，依此类推）。",
+        "description": "灯具：{name}（`{entity}`）。为此灯单独设置各时段参数，替代全局设定。字段顺序：夜间、日间（若启用），之后每个额外时段一对亮度/色温（extra_0 = 时段 1，依此类推）。",
         "data": {
-          "ovr_enable": "为此灯使用自定义参数",
           "brightness": "夜间亮度（%）",
           "color_temp_kelvin": "夜间色温",
           "day_brightness": "日间亮度（%）",

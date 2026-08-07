@@ -60,13 +60,27 @@
       },
       "per_light": {
         "title": "Per-light override ({position})",
-        "description": "Light: {name} (`{entity}`). Fields: night, daytime (if enabled), then one brightness/color-temperature pair per extra period (extra_0 = period 1, etc.).",
+        "description": "Light: {name} (`{entity}`). Set custom parameters for this light, replacing the global values. Fields: night, daytime (if enabled), then one brightness/color-temperature pair per extra period (extra_0 = period 1, etc.).",
         "data": {
-          "ovr_enable": "Use custom parameters for this light",
           "brightness": "Night brightness (%)",
           "color_temp_kelvin": "Night color temperature",
           "day_brightness": "Daytime brightness (%)",
           "day_color_temp_kelvin": "Daytime color temperature"
+        }
+      },
+      "reconfigure": {
+        "title": "Time settings",
+        "description": "Each anchor of the night period picks its own source: fixed time, sunset or sunrise, with an independent offset.",
+        "data": {
+          "start_mode": "Night starts at",
+          "trigger_time": "Night start fixed time (when source is fixed)",
+          "start_offset": "Night start offset (minutes, negative = earlier)",
+          "end_mode": "Night ends / daytime starts at",
+          "end_time": "Night end fixed time (when source is fixed)",
+          "end_offset": "Night end offset (minutes, negative = earlier)",
+          "sun_entity": "Sun entity for sunrise/sunset (default: built-in sun.sun; custom entities need next_rising / next_setting attributes)",
+          "day_enabled": "Apply daytime settings after night ends",
+          "extra_enabled": "Enable extra time periods"
         }
       }
     },
@@ -135,9 +149,8 @@
       },
       "per_light": {
         "title": "Per-light override ({position})",
-        "description": "Light: {name} (`{entity}`). Fields: night, daytime (if enabled), then one brightness/color-temperature pair per extra period (extra_0 = period 1, etc.).",
+        "description": "Light: {name} (`{entity}`). Set custom parameters for this light, replacing the global values. Fields: night, daytime (if enabled), then one brightness/color-temperature pair per extra period (extra_0 = period 1, etc.).",
         "data": {
-          "ovr_enable": "Use custom parameters for this light",
           "brightness": "Night brightness (%)",
           "color_temp_kelvin": "Night color temperature",
           "day_brightness": "Daytime brightness (%)",

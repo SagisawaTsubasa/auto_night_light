@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.config_entries import (
+    SOURCE_RECONFIGURE,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.core import callback
 from homeassistant.helpers.selector import (
     BooleanSelector,
@@ -78,9 +83,6 @@ from .const import (
     OVR_EXTRA_COLOR_TEMP_KELVIN,
     OVR_EXTRAS,
 )
-
-OVR_ENABLE = "ovr_enable"
-
 
 def _pct_selector(key: str, default: int) -> tuple:
     return vol.Required(key, default=default), NumberSelector(
@@ -300,8 +302,7 @@ def _override_schema(
 ) -> vol.Schema:
     """Per-light override schema: night + day + every extra period."""
     current = current or {}
-    enabled = bool(current)
-    schema: dict = {vol.Required(OVR_ENABLE, default=enabled): BooleanSelector()}
+    schema: dict = {}
     _add_period_fields(
         schema, OVR_BRIGHTNESS, OVR_COLOR_TEMP_KELVIN,
         current, settings[CONF_BRIGHTNESS], settings[CONF_COLOR_TEMP_KELVIN],
@@ -362,25 +363,22 @@ async def _per_light_step(flow, user_input, finish):
     """Shared per-light override step logic for config and options flows."""
     if user_input is not None:
         entity = flow._custom_lights[flow._idx]
-        if user_input.get(OVR_ENABLE):
-            ovr = {
-                OVR_BRIGHTNESS: user_input[OVR_BRIGHTNESS],
-                OVR_COLOR_TEMP_KELVIN: user_input[OVR_COLOR_TEMP_KELVIN],
+        ovr = {
+            OVR_BRIGHTNESS: user_input[OVR_BRIGHTNESS],
+            OVR_COLOR_TEMP_KELVIN: user_input[OVR_COLOR_TEMP_KELVIN],
+        }
+        if flow._day_enabled:
+            ovr[OVR_DAY_BRIGHTNESS] = user_input[OVR_DAY_BRIGHTNESS]
+            ovr[OVR_DAY_COLOR_TEMP_KELVIN] = user_input[OVR_DAY_COLOR_TEMP_KELVIN]
+        ovr_extras = {}
+        for i in range(len(flow._extras)):
+            ovr_extras[str(i)] = {
+                OVR_EXTRA_BRIGHTNESS: user_input[f"extra_{i}_brightness"],
+                OVR_EXTRA_COLOR_TEMP_KELVIN: user_input[f"extra_{i}_kelvin"],
             }
-            if flow._day_enabled:
-                ovr[OVR_DAY_BRIGHTNESS] = user_input[OVR_DAY_BRIGHTNESS]
-                ovr[OVR_DAY_COLOR_TEMP_KELVIN] = user_input[OVR_DAY_COLOR_TEMP_KELVIN]
-            ovr_extras = {}
-            for i in range(len(flow._extras)):
-                ovr_extras[str(i)] = {
-                    OVR_EXTRA_BRIGHTNESS: user_input[f"extra_{i}_brightness"],
-                    OVR_EXTRA_COLOR_TEMP_KELVIN: user_input[f"extra_{i}_kelvin"],
-                }
-            if ovr_extras:
-                ovr[OVR_EXTRAS] = ovr_extras
-            flow._overrides[entity] = ovr
-        else:
-            flow._overrides.pop(entity, None)
+        if ovr_extras:
+            ovr[OVR_EXTRAS] = ovr_extras
+        flow._overrides[entity] = ovr
         flow._idx += 1
 
     if flow._idx >= len(flow._custom_lights):
@@ -543,30 +541,53 @@ class AutoNightLightConfigFlow(_FlowMixin, ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Store intermediate data between steps."""
         self._init_state()
+        self._prefill: dict | None = None
 
     async def async_step_user(self, user_input=None) -> ConfigFlowResult:
         """Step 1: time settings."""
         return await self._handle_time_step(user_input, "user", {})
 
+    async def async_step_reconfigure(self, user_input=None) -> ConfigFlowResult:
+        """Reconfigure: same pages as adding, prefilled from the entry."""
+        if self._prefill is None:
+            entry = self._get_reconfigure_entry()
+            current = {**entry.data, **entry.options}
+            self._extras = [dict(e) for e in current.get(CONF_EXTRAS, [])]
+            self._extra_count = len(self._extras)
+            self._custom_lights = list(current.get(CONF_CUSTOM_PER_LIGHT, []))
+            self._overrides = dict(current.get(CONF_OVERRIDES, {}))
+            self._prefill = current
+        return await self._handle_time_step(
+            user_input, "reconfigure", self._prefill, suggest=self._prefill
+        )
+
     async def async_step_extra_count(self, user_input=None) -> ConfigFlowResult:
-        return await self._async_step_extra_count(user_input)
+        return await self._async_step_extra_count(user_input, self._prefill)
 
     async def async_step_extra_period(self, user_input=None) -> ConfigFlowResult:
         return await self._async_step_extra_period(user_input)
 
     async def async_step_lights(self, user_input=None) -> ConfigFlowResult:
-        return await self._async_step_lights(user_input)
+        return await self._async_step_lights(
+            user_input, self._prefill, suggest=self._prefill
+        )
 
     async def async_step_lights_extra(self, user_input=None) -> ConfigFlowResult:
         return await self._async_step_lights_extra(user_input)
 
     async def async_step_settings(self, user_input=None) -> ConfigFlowResult:
-        return await self._async_step_settings(user_input)
+        return await self._async_step_settings(user_input, self._prefill)
 
     async def async_step_per_light(self, user_input=None) -> ConfigFlowResult:
         return await self._async_step_per_light(user_input)
 
     async def _finish(self) -> ConfigFlowResult:
+        if self.source == SOURCE_RECONFIGURE:
+            return self.async_update_reload_and_abort(
+                self._get_reconfigure_entry(),
+                data=self._entry_data(),
+                options={},
+            )
         return self.async_create_entry(title="自动夜灯", data=self._entry_data())
 
     @staticmethod
