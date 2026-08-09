@@ -3,17 +3,27 @@
     "step": {
       "user": {
         "title": "时间设置",
-        "description": "夜间的开始和结束锚点可各自独立选择来源：固定时间、日落或日出，并分别设置偏移。例如：22:00 固定入夜，日出+15 分钟恢复日间。",
+        "description": "选择夜间各锚点的确定方式以及启用哪些功能。下一页只会显示与选择相关的字段。",
         "data": {
           "start_mode": "夜间开始方式",
-          "trigger_time": "夜间开始固定时间（方式为固定时间时生效）",
-          "start_offset": "夜间开始偏移（分钟，负数=提前）",
           "end_mode": "夜间结束/日间开始方式",
-          "end_time": "夜间结束固定时间（方式为固定时间时生效）",
-          "end_offset": "夜间结束偏移（分钟，负数=提前）",
-          "sun_entity": "日出日落实体（默认内置 sun.sun；自定义实体需含 next_rising / next_setting 属性）",
+          "transition_enabled": "启用时段间渐变过渡",
           "day_enabled": "夜间结束后应用日间参数",
           "extra_enabled": "启用额外时段"
+        }
+      },
+      "time_details": {
+        "title": "时间详情",
+        "description": "只显示与你的选择相关的字段。过渡时长为 0 表示立即切换。",
+        "data": {
+          "trigger_time": "夜间开始固定时间",
+          "start_offset": "夜间开始偏移（分钟，负数=提前）",
+          "end_time": "夜间结束固定时间",
+          "end_offset": "夜间结束偏移（分钟，负数=提前）",
+          "sun_entity": "日出日落实体（默认内置 sun.sun；自定义实体需含 next_rising / next_setting 属性）",
+          "start_transition": "夜间开始过渡时长（分钟，0=关闭）",
+          "end_transition": "夜间结束过渡时长（分钟，0=关闭）",
+          "transition_interval": "渐变步进间隔（分钟）"
         }
       },
       "extra_count": {
@@ -29,7 +39,8 @@
           "name": "名称（可选，仅用于显示）",
           "start": "开始时间",
           "brightness": "亮度（%）",
-          "color_temp_kelvin": "色温"
+          "color_temp_kelvin": "色温",
+          "transition": "过渡时长（分钟，0=立即切换）"
         }
       },
       "lights": {
@@ -70,15 +81,11 @@
       },
       "reconfigure": {
         "title": "时间设置",
-        "description": "夜间的开始和结束锚点可各自独立选择来源：固定时间、日落或日出，并分别设置偏移。例如：22:00 固定入夜，日出+15 分钟恢复日间。",
+        "description": "选择夜间各锚点的确定方式以及启用哪些功能。下一页只会显示与选择相关的字段。",
         "data": {
           "start_mode": "夜间开始方式",
-          "trigger_time": "夜间开始固定时间（方式为固定时间时生效）",
-          "start_offset": "夜间开始偏移（分钟，负数=提前）",
           "end_mode": "夜间结束/日间开始方式",
-          "end_time": "夜间结束固定时间（方式为固定时间时生效）",
-          "end_offset": "夜间结束偏移（分钟，负数=提前）",
-          "sun_entity": "日出日落实体（默认内置 sun.sun；自定义实体需含 next_rising / next_setting 属性）",
+          "transition_enabled": "启用时段间渐变过渡",
           "day_enabled": "夜间结束后应用日间参数",
           "extra_enabled": "启用额外时段"
         }
@@ -92,17 +99,27 @@
     "step": {
       "init": {
         "title": "时间设置",
-        "description": "夜间的开始和结束锚点可各自独立选择来源：固定时间、日落或日出，并分别设置偏移。例如：22:00 固定入夜，日出+15 分钟恢复日间。",
+        "description": "选择夜间各锚点的确定方式以及启用哪些功能。下一页只会显示与选择相关的字段。",
         "data": {
           "start_mode": "夜间开始方式",
-          "trigger_time": "夜间开始固定时间（方式为固定时间时生效）",
-          "start_offset": "夜间开始偏移（分钟，负数=提前）",
           "end_mode": "夜间结束/日间开始方式",
-          "end_time": "夜间结束固定时间（方式为固定时间时生效）",
-          "end_offset": "夜间结束偏移（分钟，负数=提前）",
-          "sun_entity": "日出日落实体（默认内置 sun.sun；自定义实体需含 next_rising / next_setting 属性）",
+          "transition_enabled": "启用时段间渐变过渡",
           "day_enabled": "夜间结束后应用日间参数",
           "extra_enabled": "启用额外时段"
+        }
+      },
+      "time_details": {
+        "title": "时间详情",
+        "description": "只显示与你的选择相关的字段。过渡时长为 0 表示立即切换。",
+        "data": {
+          "trigger_time": "夜间开始固定时间",
+          "start_offset": "夜间开始偏移（分钟，负数=提前）",
+          "end_time": "夜间结束固定时间",
+          "end_offset": "夜间结束偏移（分钟，负数=提前）",
+          "sun_entity": "日出日落实体（默认内置 sun.sun；自定义实体需含 next_rising / next_setting 属性）",
+          "start_transition": "夜间开始过渡时长（分钟，0=关闭）",
+          "end_transition": "夜间结束过渡时长（分钟，0=关闭）",
+          "transition_interval": "渐变步进间隔（分钟）"
         }
       },
       "extra_count": {
@@ -118,7 +135,8 @@
           "name": "名称（可选，仅用于显示）",
           "start": "开始时间",
           "brightness": "亮度（%）",
-          "color_temp_kelvin": "色温"
+          "color_temp_kelvin": "色温",
+          "transition": "过渡时长（分钟，0=立即切换）"
         }
       },
       "lights": {

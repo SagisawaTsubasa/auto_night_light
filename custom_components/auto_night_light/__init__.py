@@ -49,8 +49,8 @@ def _pct(v) -> int:
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate old entries to the current version (v5)."""
-    if entry.version >= 5:
+    """Migrate old entries to the current version (v6)."""
+    if entry.version >= 6:
         return True
     data = dict(entry.data)
     options = dict(entry.options)
@@ -129,8 +129,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 store.setdefault(CONF_END_MODE, ANCHOR_SUNRISE)
             store.setdefault(CONF_START_OFFSET, sunset_offset)
             store.setdefault(CONF_END_OFFSET, sunrise_offset)
+    # v5 -> v6：新增过渡字段均有默认值，无需改写数据
     hass.config_entries.async_update_entry(
-        entry, data=data, options=options, version=5
+        entry, data=data, options=options, version=6
     )
     return True
 

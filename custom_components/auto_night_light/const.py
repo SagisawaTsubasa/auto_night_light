@@ -13,6 +13,10 @@ CONF_END_OFFSET = "end_offset"
 CONF_EXTRA_ENABLED = "extra_enabled"
 CONF_EXTRA_COUNT = "extra_count"
 CONF_EXTRAS = "extras"
+CONF_TRANSITION_ENABLED = "transition_enabled"
+CONF_START_TRANSITION = "start_transition"
+CONF_END_TRANSITION = "end_transition"
+CONF_TRANSITION_INTERVAL = "transition_interval"
 CONF_BRIGHTNESS = "brightness"
 CONF_COLOR_TEMP_KELVIN = "color_temp_kelvin"
 CONF_DAY_ENABLED = "day_enabled"
@@ -41,6 +45,7 @@ EXTRA_NAME = "name"
 EXTRA_START = "start"
 EXTRA_BRIGHTNESS = "brightness"
 EXTRA_COLOR_TEMP_KELVIN = "color_temp_kelvin"
+EXTRA_TRANSITION = "transition"
 
 # 逐灯覆盖的子键
 OVR_BRIGHTNESS = "brightness"
@@ -66,6 +71,8 @@ DEFAULT_TURN_ON_LISTEN = True
 DEFAULT_SETTLE_DELAY = 1
 DEFAULT_DAY_BRIGHTNESS = 100
 DEFAULT_DAY_COLOR_TEMP_KELVIN = 4000
+DEFAULT_TRANSITION_INTERVAL = 5
+MAX_TRANSITION_MINUTES = 120
 
 MODE_NIGHT = "night"
 MODE_DAY = "day"

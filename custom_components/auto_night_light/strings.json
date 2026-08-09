@@ -3,17 +3,27 @@
     "step": {
       "user": {
         "title": "Time settings",
-        "description": "Each anchor of the night period picks its own source: fixed time, sunset or sunrise, with an independent offset.",
+        "description": "Choose how each anchor of the night period is determined and which features are enabled. Only relevant fields are shown on the next page.",
         "data": {
           "start_mode": "Night starts at",
-          "trigger_time": "Night start fixed time (when source is fixed)",
-          "start_offset": "Night start offset (minutes, negative = earlier)",
           "end_mode": "Night ends / daytime starts at",
-          "end_time": "Night end fixed time (when source is fixed)",
-          "end_offset": "Night end offset (minutes, negative = earlier)",
-          "sun_entity": "Sun entity for sunrise/sunset (default: built-in sun.sun; custom entities need next_rising / next_setting attributes)",
+          "transition_enabled": "Enable gradual transitions between periods",
           "day_enabled": "Apply daytime settings after night ends",
           "extra_enabled": "Enable extra time periods"
+        }
+      },
+      "time_details": {
+        "title": "Time details",
+        "description": "Only fields relevant to your choices are shown. Transition duration 0 = instant switch.",
+        "data": {
+          "trigger_time": "Night start fixed time",
+          "start_offset": "Night start offset (minutes, negative = earlier)",
+          "end_time": "Night end fixed time",
+          "end_offset": "Night end offset (minutes, negative = earlier)",
+          "sun_entity": "Sun entity (default: built-in sun.sun; custom entities need next_rising / next_setting attributes)",
+          "start_transition": "Night start transition duration (minutes, 0 = off)",
+          "end_transition": "Night end transition duration (minutes, 0 = off)",
+          "transition_interval": "Transition step interval (minutes)"
         }
       },
       "extra_count": {
@@ -29,7 +39,8 @@
           "name": "Name (optional, display only)",
           "start": "Starts at",
           "brightness": "Brightness (%)",
-          "color_temp_kelvin": "Color temperature"
+          "color_temp_kelvin": "Color temperature",
+          "transition": "Transition duration (minutes, 0 = instant switch)"
         }
       },
       "lights": {
@@ -70,15 +81,11 @@
       },
       "reconfigure": {
         "title": "Time settings",
-        "description": "Each anchor of the night period picks its own source: fixed time, sunset or sunrise, with an independent offset.",
+        "description": "Choose how each anchor of the night period is determined and which features are enabled. Only relevant fields are shown on the next page.",
         "data": {
           "start_mode": "Night starts at",
-          "trigger_time": "Night start fixed time (when source is fixed)",
-          "start_offset": "Night start offset (minutes, negative = earlier)",
           "end_mode": "Night ends / daytime starts at",
-          "end_time": "Night end fixed time (when source is fixed)",
-          "end_offset": "Night end offset (minutes, negative = earlier)",
-          "sun_entity": "Sun entity for sunrise/sunset (default: built-in sun.sun; custom entities need next_rising / next_setting attributes)",
+          "transition_enabled": "Enable gradual transitions between periods",
           "day_enabled": "Apply daytime settings after night ends",
           "extra_enabled": "Enable extra time periods"
         }
@@ -92,17 +99,27 @@
     "step": {
       "init": {
         "title": "Time settings",
-        "description": "Each anchor of the night period picks its own source: fixed time, sunset or sunrise, with an independent offset.",
+        "description": "Choose how each anchor of the night period is determined and which features are enabled. Only relevant fields are shown on the next page.",
         "data": {
           "start_mode": "Night starts at",
-          "trigger_time": "Night start fixed time (when source is fixed)",
-          "start_offset": "Night start offset (minutes, negative = earlier)",
           "end_mode": "Night ends / daytime starts at",
-          "end_time": "Night end fixed time (when source is fixed)",
-          "end_offset": "Night end offset (minutes, negative = earlier)",
-          "sun_entity": "Sun entity for sunrise/sunset (default: built-in sun.sun; custom entities need next_rising / next_setting attributes)",
+          "transition_enabled": "Enable gradual transitions between periods",
           "day_enabled": "Apply daytime settings after night ends",
           "extra_enabled": "Enable extra time periods"
+        }
+      },
+      "time_details": {
+        "title": "Time details",
+        "description": "Only fields relevant to your choices are shown. Transition duration 0 = instant switch.",
+        "data": {
+          "trigger_time": "Night start fixed time",
+          "start_offset": "Night start offset (minutes, negative = earlier)",
+          "end_time": "Night end fixed time",
+          "end_offset": "Night end offset (minutes, negative = earlier)",
+          "sun_entity": "Sun entity (default: built-in sun.sun; custom entities need next_rising / next_setting attributes)",
+          "start_transition": "Night start transition duration (minutes, 0 = off)",
+          "end_transition": "Night end transition duration (minutes, 0 = off)",
+          "transition_interval": "Transition step interval (minutes)"
         }
       },
       "extra_count": {
@@ -118,7 +135,8 @@
           "name": "Name (optional, display only)",
           "start": "Starts at",
           "brightness": "Brightness (%)",
-          "color_temp_kelvin": "Color temperature"
+          "color_temp_kelvin": "Color temperature",
+          "transition": "Transition duration (minutes, 0 = instant switch)"
         }
       },
       "lights": {

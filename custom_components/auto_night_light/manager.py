@@ -27,6 +27,7 @@ from homeassistant.const import (
 from homeassistant.helpers.event import (
     async_track_point_in_time,
     async_track_state_change_event,
+    async_track_time_interval,
 )
 from homeassistant.helpers.sun import get_astral_event_date
 import homeassistant.util.dt as dt_util
@@ -50,10 +51,14 @@ from .const import (
     CONF_SETTLE_DELAY,
     CONF_START_MODE,
     CONF_START_OFFSET,
+    CONF_START_TRANSITION,
     CONF_SUN_ENTITY,
     CONF_TOLERANCE_BRIGHTNESS,
     CONF_TOLERANCE_KELVIN,
     CONF_TRIGGER_TIME,
+    CONF_END_TRANSITION,
+    CONF_TRANSITION_ENABLED,
+    CONF_TRANSITION_INTERVAL,
     CONF_TURN_ON_LISTEN,
     CONF_VERIFY_DELAY,
     DEFAULT_BRIGHTNESS,
@@ -68,12 +73,14 @@ from .const import (
     DEFAULT_START_OFFSET,
     DEFAULT_SUN_ENTITY,
     DEFAULT_TOLERANCE_BRIGHTNESS,
+    DEFAULT_TRANSITION_INTERVAL,
     DEFAULT_TOLERANCE_KELVIN,
     DEFAULT_TURN_ON_LISTEN,
     DEFAULT_VERIFY_DELAY,
     EXTRA_BRIGHTNESS,
     EXTRA_COLOR_TEMP_KELVIN,
     EXTRA_START,
+    EXTRA_TRANSITION,
     MODE_DAY,
     MODE_EXTRA_PREFIX,
     MODE_NIGHT,
@@ -87,6 +94,8 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+_NOT_IN_BAND = object()  # _band_params 哨兵：当前不在任何过渡带内
 
 
 class LightState(enum.Enum):
@@ -132,6 +141,18 @@ class NightLightManager:
         self.extras: list[dict] = [
             dict(e) for e in data.get(CONF_EXTRAS, [])
         ]
+        self.transition_enabled: bool = data.get(CONF_TRANSITION_ENABLED, False)
+        self.start_transition: int = (
+            int(data.get(CONF_START_TRANSITION, 0)) if self.transition_enabled else 0
+        )
+        self.end_transition: int = (
+            int(data.get(CONF_END_TRANSITION, 0))
+            if self.transition_enabled and data.get(CONF_DAY_ENABLED, False)
+            else 0
+        )
+        self.transition_interval: int = int(
+            data.get(CONF_TRANSITION_INTERVAL, DEFAULT_TRANSITION_INTERVAL)
+        )
         self.brightness: int = data.get(CONF_BRIGHTNESS, DEFAULT_BRIGHTNESS)
         self.kelvin: int = data.get(CONF_COLOR_TEMP_KELVIN, DEFAULT_COLOR_TEMP_KELVIN)
         self.tol_brightness: int = data.get(
@@ -156,6 +177,14 @@ class NightLightManager:
         self._unsub_time = None
         self._unsub_state = None
         self._unsub_sun = None
+        self._unsub_tick = None
+
+    @property
+    def _has_transitions(self) -> bool:
+        """Return True if any anchor has a transition band configured."""
+        if self.start_transition > 0 or self.end_transition > 0:
+            return True
+        return any(int(e.get(EXTRA_TRANSITION, 0) or 0) > 0 for e in self.extras)
 
     def params_for(self, entity_id: str, mode: str) -> tuple[int, int]:
         """Resolve effective (brightness, kelvin) for a light, applying overrides."""
@@ -191,6 +220,16 @@ class NightLightManager:
             self._unsub_sun = async_track_state_change_event(
                 self.hass, [self.sun_entity], self._async_sun_entity_changed
             )
+        if self._has_transitions:
+            self._unsub_tick = async_track_time_interval(
+                self.hass,
+                self._async_transition_tick,
+                timedelta(minutes=self.transition_interval),
+            )
+            _LOGGER.info(
+                "Transition bands active, ticking every %d min",
+                self.transition_interval,
+            )
         if self.turn_on_listen:
             self._unsub_state = async_track_state_change_event(
                 self.hass, self.lights, self._async_light_state_changed
@@ -206,12 +245,18 @@ class NightLightManager:
 
     def stop(self) -> None:
         """Cancel the schedule and the listeners."""
-        for unsub in (self._unsub_time, self._unsub_state, self._unsub_sun):
+        for unsub in (
+            self._unsub_time,
+            self._unsub_state,
+            self._unsub_sun,
+            self._unsub_tick,
+        ):
             if unsub is not None:
                 unsub()
         self._unsub_time = None
         self._unsub_state = None
         self._unsub_sun = None
+        self._unsub_tick = None
 
     def _uses_custom_sun_entity(self) -> bool:
         """Return True if any anchor relies on a non-default sun entity."""
@@ -321,14 +366,10 @@ class NightLightManager:
             self._anchor_time(self.end_mode, self.end_time, self.end_offset),
         )
 
-    def current_mode(self) -> str | None:
-        """Resolve the active period from time anchors.
+    def _anchor_modes(self) -> list[tuple]:
+        """Return [(anchor_time, mode)] for extras and base anchors.
 
-        每个配置的时间是一个锚点：从该时刻起生效，直到下一个锚点。
-        锚点按 24 小时循环取“最近已过去”的一个；额外时段锚点排在
-        基础锚点之前，同一时刻冲突时额外时段优先：
-        夜间开始 -> night，夜间结束 -> day（未启用日间则为 None），
-        额外时段 i 开始 -> extra_i。
+        额外时段锚点排在基础锚点之前，同一时刻冲突时额外时段优先。
         """
         anchors: list[tuple] = []
         for i, extra in enumerate(self.extras):
@@ -338,19 +379,100 @@ class NightLightManager:
         t_night_start, t_night_end = self._night_anchor_times()
         anchors.append((t_night_start, MODE_NIGHT))
         anchors.append((t_night_end, MODE_DAY if self.day_enabled else None))
+        return anchors
 
-        now = dt_util.now().time()
-        now_min = now.hour * 60 + now.minute
+    def _mode_at(self, minutes: int) -> str | None:
+        """Resolve the active mode at a given minute-of-day (anchor model)."""
         best_mode: str | None = None
         best_delta: int | None = None
-        for t, mode in anchors:
+        for t, mode in self._anchor_modes():
             if t is None:
                 continue
             anchor_min = t.hour * 60 + t.minute
-            delta = (now_min - anchor_min) % 1440
+            delta = (minutes - anchor_min) % 1440
             if best_delta is None or delta < best_delta:
                 best_mode, best_delta = mode, delta
         return best_mode
+
+    def current_mode(self) -> str | None:
+        """Resolve the active period from time anchors (no transitions)."""
+        now = dt_util.now().time()
+        return self._mode_at(now.hour * 60 + now.minute)
+
+    def _transition_bands(self) -> list[tuple]:
+        """Return [(anchor_minutes, target_mode, duration_min)] for active bands."""
+        bands: list[tuple] = []
+        for i, extra in enumerate(self.extras):
+            dur = int(extra.get(EXTRA_TRANSITION, 0) or 0)
+            t = dt_util.parse_time(extra.get(EXTRA_START, ""))
+            if dur > 0 and t is not None:
+                bands.append((t.hour * 60 + t.minute, f"extra_{i}", dur))
+        t_night_start, t_night_end = self._night_anchor_times()
+        if self.start_transition > 0 and t_night_start is not None:
+            bands.append(
+                (
+                    t_night_start.hour * 60 + t_night_start.minute,
+                    MODE_NIGHT,
+                    self.start_transition,
+                )
+            )
+        if self.end_transition > 0 and t_night_end is not None and self.day_enabled:
+            bands.append(
+                (t_night_end.hour * 60 + t_night_end.minute, MODE_DAY, self.end_transition)
+            )
+        return bands
+
+    def _band_params(self, entity_id: str, now_min: int):
+        """Interpolate params inside a transition band.
+
+        返回 _NOT_IN_BAND 表示当前不在任何过渡带内；
+        返回 None 表示带内但起点无生效模式（本轮不干预）；
+        否则返回插值后的 (brightness, kelvin)。
+        起点参数取带起点时刻按纯锚点解析的模式快照。
+        """
+        for anchor_min, target_mode, dur in self._transition_bands():
+            band_start = (anchor_min - dur) % 1440
+            elapsed = (now_min - band_start) % 1440
+            if elapsed >= dur:
+                continue
+            from_mode = self._mode_at(band_start)
+            if from_mode is None:
+                return None
+            factor = elapsed / dur
+            b_from, k_from = self.params_for(entity_id, from_mode)
+            b_to, k_to = self.params_for(entity_id, target_mode)
+            return (
+                round(b_from + (b_to - b_from) * factor),
+                round(k_from + (k_to - k_from) * factor),
+            )
+        return _NOT_IN_BAND
+
+    def current_params(self, entity_id: str) -> tuple[int, int] | None:
+        """Resolve the effective (brightness, kelvin) for right now.
+
+        过渡带内返回插值，带外按锚点模式取参；无生效模式返回 None。
+        """
+        now = dt_util.now().time()
+        now_min = now.hour * 60 + now.minute
+        if self._has_transitions:
+            band = self._band_params(entity_id, now_min)
+            if band is not _NOT_IN_BAND:
+                return band
+        mode = self._mode_at(now_min)
+        if mode is None:
+            return None
+        return self.params_for(entity_id, mode)
+
+    async def _async_transition_tick(self, _now) -> None:
+        """Periodic tick: advance transitions for lights inside a band."""
+        now = dt_util.now().time()
+        now_min = now.hour * 60 + now.minute
+        for entity_id in self.lights:
+            params = self._band_params(entity_id, now_min)
+            if params is _NOT_IN_BAND or params is None:
+                continue
+            # 过渡步进绝不主动开灯（Q2），仅调已亮的灯
+            await self._async_process_light(entity_id, *params, allow_turn_on=False)
 
     async def _async_light_state_changed(
         self, event: Event[EventStateChangedData]
@@ -367,22 +489,23 @@ class NightLightManager:
         ):
             return  # 仅响应 关→开，忽略运行中的属性变化，避免自触发循环
         entity_id = event.data["entity_id"]
-        mode = self.current_mode()
-        if mode is None:
+        params = self.current_params(entity_id)
+        if params is None:
             _LOGGER.debug(
                 "%s turned on outside all active periods, ignored", entity_id
             )
             return
-        brightness, kelvin = self.params_for(entity_id, mode)
+        brightness, kelvin = params
         machine = self.machines.get(entity_id)
         if machine is None:
             _LOGGER.debug("%s not in machine table (stale listener?), skipped", entity_id)
             return
         machine.state = LightState.TURN_ON_PENDING
         _LOGGER.info(
-            "%s turned on (%s mode), checking after %.1fs settle delay",
+            "%s turned on (target %s%%/%sK), checking after %.1fs settle delay",
             entity_id,
-            mode,
+            brightness,
+            kelvin,
             self.settle_delay,
         )
         self.hass.loop.call_later(
@@ -435,7 +558,8 @@ class NightLightManager:
         return True
 
     async def _async_process_light(
-        self, entity_id: str, brightness: int, kelvin: int
+        self, entity_id: str, brightness: int, kelvin: int,
+        allow_turn_on: bool = True,
     ) -> None:
         """Advance the state machine for one light."""
         machine = self.machines[entity_id]
@@ -447,9 +571,9 @@ class NightLightManager:
             _LOGGER.warning("%s unavailable, skipped", entity_id)
             return
 
-        if state.state != STATE_ON and self.only_when_on:
+        if state.state != STATE_ON and (self.only_when_on or not allow_turn_on):
             machine.state = LightState.SKIPPED_OFF
-            _LOGGER.debug("%s is off and only_when_on enabled, skipped", entity_id)
+            _LOGGER.debug("%s is off, skipped", entity_id)
             return
 
         if self._matches(state, brightness, kelvin):

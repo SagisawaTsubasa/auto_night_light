@@ -26,6 +26,7 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    ANCHOR_FIXED,
     ANCHOR_MODES,
     ANCHOR_SUNRISE,
     ANCHOR_SUNSET,
@@ -44,12 +45,16 @@ from .const import (
     CONF_OVERRIDES,
     CONF_END_MODE,
     CONF_END_OFFSET,
+    CONF_END_TRANSITION,
     CONF_SETTLE_DELAY,
     CONF_START_MODE,
     CONF_START_OFFSET,
+    CONF_START_TRANSITION,
     CONF_SUN_ENTITY,
     CONF_TOLERANCE_BRIGHTNESS,
     CONF_TOLERANCE_KELVIN,
+    CONF_TRANSITION_ENABLED,
+    CONF_TRANSITION_INTERVAL,
     CONF_TRIGGER_TIME,
     CONF_TURN_ON_LISTEN,
     CONF_VERIFY_DELAY,
@@ -66,6 +71,7 @@ from .const import (
     DEFAULT_START_OFFSET,
     DEFAULT_SUN_ENTITY,
     DEFAULT_TOLERANCE_BRIGHTNESS,
+    DEFAULT_TRANSITION_INTERVAL,
     DEFAULT_TOLERANCE_KELVIN,
     DEFAULT_TURN_ON_LISTEN,
     DEFAULT_VERIFY_DELAY,
@@ -74,7 +80,9 @@ from .const import (
     EXTRA_COLOR_TEMP_KELVIN,
     EXTRA_NAME,
     EXTRA_START,
+    EXTRA_TRANSITION,
     MAX_EXTRA_PERIODS,
+    MAX_TRANSITION_MINUTES,
     OVR_BRIGHTNESS,
     OVR_COLOR_TEMP_KELVIN,
     OVR_DAY_BRIGHTNESS,
@@ -133,37 +141,21 @@ def _anchor_select(key: str, default: str) -> tuple:
 
 
 def _time_schema(defaults: dict) -> vol.Schema:
-    """Step 1: per-anchor sources for night start/end, extras/day toggles."""
+    """Step 1: anchor source choices and feature toggles only."""
     start_mode_marker, start_mode_sel = _anchor_select(
         CONF_START_MODE, defaults.get(CONF_START_MODE, ANCHOR_SUNSET)
     )
     end_mode_marker, end_mode_sel = _anchor_select(
         CONF_END_MODE, defaults.get(CONF_END_MODE, ANCHOR_SUNRISE)
     )
-    start_off_marker, start_off_sel = _offset_selector(
-        CONF_START_OFFSET, defaults.get(CONF_START_OFFSET, DEFAULT_START_OFFSET)
-    )
-    end_off_marker, end_off_sel = _offset_selector(
-        CONF_END_OFFSET, defaults.get(CONF_END_OFFSET, DEFAULT_END_OFFSET)
-    )
     return vol.Schema(
         {
             start_mode_marker: start_mode_sel,
-            vol.Required(
-                CONF_TRIGGER_TIME, default=defaults.get(CONF_TRIGGER_TIME, "22:00:00")
-            ): TimeSelector(),
-            start_off_marker: start_off_sel,
             end_mode_marker: end_mode_sel,
             vol.Required(
-                CONF_END_TIME, default=defaults.get(CONF_END_TIME, DEFAULT_END_TIME)
-            ): TimeSelector(),
-            end_off_marker: end_off_sel,
-            vol.Required(
-                CONF_SUN_ENTITY,
-                default=defaults.get(CONF_SUN_ENTITY, DEFAULT_SUN_ENTITY),
-            ): EntitySelector(
-                EntitySelectorConfig(domain=["sun", "sensor"])
-            ),
+                CONF_TRANSITION_ENABLED,
+                default=defaults.get(CONF_TRANSITION_ENABLED, False),
+            ): BooleanSelector(),
             vol.Required(
                 CONF_DAY_ENABLED, default=defaults.get(CONF_DAY_ENABLED, False)
             ): BooleanSelector(),
@@ -175,6 +167,77 @@ def _time_schema(defaults: dict) -> vol.Schema:
             ): BooleanSelector(),
         }
     )
+
+
+def _transition_slider(key: str, default: int) -> tuple:
+    return vol.Required(key, default=default), NumberSelector(
+        NumberSelectorConfig(
+            min=0, max=MAX_TRANSITION_MINUTES, step=5,
+            unit_of_measurement="min",
+            mode=NumberSelectorMode.SLIDER,
+        )
+    )
+
+
+def _time_details_schema(times: dict, defaults: dict) -> vol.Schema:
+    """Step 2: only the fields relevant to the choices made in step 1."""
+    schema: dict = {}
+    any_sun = False
+    if times.get(CONF_START_MODE) == ANCHOR_FIXED:
+        schema[
+            vol.Required(
+                CONF_TRIGGER_TIME, default=defaults.get(CONF_TRIGGER_TIME, "22:00:00")
+            )
+        ] = TimeSelector()
+    else:
+        any_sun = True
+        marker, sel = _offset_selector(
+            CONF_START_OFFSET, defaults.get(CONF_START_OFFSET, DEFAULT_START_OFFSET)
+        )
+        schema[marker] = sel
+    if times.get(CONF_END_MODE) == ANCHOR_FIXED:
+        schema[
+            vol.Required(
+                CONF_END_TIME, default=defaults.get(CONF_END_TIME, DEFAULT_END_TIME)
+            )
+        ] = TimeSelector()
+    else:
+        any_sun = True
+        marker, sel = _offset_selector(
+            CONF_END_OFFSET, defaults.get(CONF_END_OFFSET, DEFAULT_END_OFFSET)
+        )
+        schema[marker] = sel
+    if any_sun:
+        schema[
+            vol.Required(
+                CONF_SUN_ENTITY,
+                default=defaults.get(CONF_SUN_ENTITY, DEFAULT_SUN_ENTITY),
+            )
+        ] = EntitySelector(EntitySelectorConfig(domain=["sun", "sensor"]))
+    if times.get(CONF_TRANSITION_ENABLED):
+        st_marker, st_sel = _transition_slider(
+            CONF_START_TRANSITION, defaults.get(CONF_START_TRANSITION, 0)
+        )
+        schema[st_marker] = st_sel
+        if times.get(CONF_DAY_ENABLED):
+            et_marker, et_sel = _transition_slider(
+                CONF_END_TRANSITION, defaults.get(CONF_END_TRANSITION, 0)
+            )
+            schema[et_marker] = et_sel
+        schema[
+            vol.Required(
+                CONF_TRANSITION_INTERVAL,
+                default=defaults.get(
+                    CONF_TRANSITION_INTERVAL, DEFAULT_TRANSITION_INTERVAL
+                ),
+            )
+        ] = NumberSelector(
+            NumberSelectorConfig(
+                min=1, max=15, unit_of_measurement="min",
+                mode=NumberSelectorMode.SLIDER,
+            )
+        )
+    return vol.Schema(schema)
 
 
 def _extra_count_schema(defaults: dict) -> vol.Schema:
@@ -209,6 +272,10 @@ def _extra_period_schema(defaults: dict) -> vol.Schema:
         schema, EXTRA_BRIGHTNESS, EXTRA_COLOR_TEMP_KELVIN,
         defaults, DEFAULT_EXTRA_BRIGHTNESS, DEFAULT_EXTRA_COLOR_TEMP_KELVIN,
     )
+    t_marker, t_sel = _transition_slider(
+        EXTRA_TRANSITION, defaults.get(EXTRA_TRANSITION, 0)
+    )
+    schema[t_marker] = t_sel
     return vol.Schema(schema)
 
 
@@ -317,9 +384,15 @@ def _override_schema(
     ovr_extras = current.get(OVR_EXTRAS, {})
     for i, extra in enumerate(extras):
         cur = ovr_extras.get(str(i), {})
+        # 存储键是 brightness/color_temp_kelvin，需映射到表单键 extra_{i}_*
+        cur_mapped = {}
+        if OVR_EXTRA_BRIGHTNESS in cur:
+            cur_mapped[f"extra_{i}_brightness"] = cur[OVR_EXTRA_BRIGHTNESS]
+        if OVR_EXTRA_COLOR_TEMP_KELVIN in cur:
+            cur_mapped[f"extra_{i}_kelvin"] = cur[OVR_EXTRA_COLOR_TEMP_KELVIN]
         _add_period_fields(
             schema, f"extra_{i}_brightness", f"extra_{i}_kelvin",
-            cur,
+            cur_mapped,
             extra.get(EXTRA_BRIGHTNESS, DEFAULT_EXTRA_BRIGHTNESS),
             extra.get(EXTRA_COLOR_TEMP_KELVIN, DEFAULT_EXTRA_COLOR_TEMP_KELVIN),
         )
@@ -339,6 +412,7 @@ async def _extra_period_step(flow, user_input, next_step):
             EXTRA_START: user_input[EXTRA_START],
             EXTRA_BRIGHTNESS: user_input[EXTRA_BRIGHTNESS],
             EXTRA_COLOR_TEMP_KELVIN: user_input[EXTRA_COLOR_TEMP_KELVIN],
+            EXTRA_TRANSITION: int(user_input.get(EXTRA_TRANSITION, 0)),
         }
         if flow._idx < len(flow._extras):
             flow._extras[flow._idx] = extra
@@ -435,17 +509,27 @@ class _FlowMixin:
         self._suggest: dict | None = None
 
     async def _handle_time_step(self, user_input, step_id):
-        """Step 1: time settings."""
+        """Step 1: anchor source choices and toggles."""
         if user_input is not None:
             self._times = user_input
-            if user_input.get(CONF_EXTRA_ENABLED):
-                return await self._async_step_extra_count()
-            self._extras = []
-            return await self._async_step_lights()
+            return await self._async_step_time_details()
         schema = _time_schema(self._defaults)
         if self._suggest is not None:
             schema = self.add_suggested_values_to_schema(schema, self._suggest)
         return self.async_show_form(step_id=step_id, data_schema=schema)
+
+    async def _async_step_time_details(self, user_input=None):
+        """Step 2: only the fields relevant to the step-1 choices."""
+        if user_input is not None:
+            self._times.update(user_input)
+            if self._times.get(CONF_EXTRA_ENABLED):
+                return await self._async_step_extra_count()
+            self._extras = []
+            return await self._async_step_lights()
+        schema = _time_details_schema(self._times, self._defaults)
+        if self._suggest is not None:
+            schema = self.add_suggested_values_to_schema(schema, self._suggest)
+        return self.async_show_form(step_id="time_details", data_schema=schema)
 
     async def _async_step_extra_count(self, user_input=None):
         """Step 2 (optional): how many extra periods."""
@@ -539,7 +623,7 @@ class _FlowMixin:
 class AutoNightLightConfigFlow(_FlowMixin, ConfigFlow, domain=DOMAIN):
     """Handle the initial config flow."""
 
-    VERSION = 5
+    VERSION = 6
 
     def __init__(self) -> None:
         """Store intermediate data between steps."""
@@ -561,6 +645,9 @@ class AutoNightLightConfigFlow(_FlowMixin, ConfigFlow, domain=DOMAIN):
             self._defaults = current
             self._suggest = current
         return await self._handle_time_step(user_input, "reconfigure")
+
+    async def async_step_time_details(self, user_input=None) -> ConfigFlowResult:
+        return await self._async_step_time_details(user_input)
 
     async def async_step_extra_count(self, user_input=None) -> ConfigFlowResult:
         return await self._async_step_extra_count(user_input)
@@ -618,6 +705,9 @@ class AutoNightLightOptionsFlow(_FlowMixin, OptionsFlow):
     async def async_step_init(self, user_input=None) -> ConfigFlowResult:
         """Step 1: time settings, prefilled with current values."""
         return await self._handle_time_step(user_input, "init")
+
+    async def async_step_time_details(self, user_input=None) -> ConfigFlowResult:
+        return await self._async_step_time_details(user_input)
 
     async def async_step_extra_count(self, user_input=None) -> ConfigFlowResult:
         return await self._async_step_extra_count(user_input)
