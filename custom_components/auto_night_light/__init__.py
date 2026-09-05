@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 
@@ -150,7 +152,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             for mgr in hass.data.get(DOMAIN, {}).values():
                 await mgr.async_trigger(reason="service")
 
-        hass.services.async_register(DOMAIN, SERVICE_TRIGGER_NOW, _handle_trigger_now)
+        hass.services.async_register(
+            DOMAIN, SERVICE_TRIGGER_NOW, _handle_trigger_now, schema=vol.Schema({})
+        )
 
     return True
 
@@ -162,9 +166,10 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    manager: NightLightManager = hass.data[DOMAIN].pop(entry.entry_id)
-    manager.stop()
-    if not hass.data[DOMAIN]:
+    manager: NightLightManager | None = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+    if manager is not None:
+        manager.stop()
+    if not hass.data.get(DOMAIN):
         hass.services.async_remove(DOMAIN, SERVICE_TRIGGER_NOW)
-        hass.data.pop(DOMAIN)
+        hass.data.pop(DOMAIN, None)
     return True

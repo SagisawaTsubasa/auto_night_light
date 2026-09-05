@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import copy
 import enum
 import logging
 from dataclasses import dataclass, field
@@ -25,6 +27,7 @@ from homeassistant.const import (
     SUN_EVENT_SUNSET,
 )
 from homeassistant.helpers.event import (
+    async_call_later,
     async_track_point_in_time,
     async_track_state_change_event,
     async_track_time_interval,
@@ -76,6 +79,7 @@ from .const import (
     DEFAULT_TRANSITION_INTERVAL,
     DEFAULT_TOLERANCE_KELVIN,
     DEFAULT_TURN_ON_LISTEN,
+    DEFAULT_TRIGGER_TIME,
     DEFAULT_VERIFY_DELAY,
     EXTRA_BRIGHTNESS,
     EXTRA_COLOR_TEMP_KELVIN,
@@ -136,7 +140,7 @@ class NightLightManager:
         self.start_offset: int = data.get(CONF_START_OFFSET, DEFAULT_START_OFFSET)
         self.end_mode: str = data.get(CONF_END_MODE, ANCHOR_SUNRISE)
         self.end_offset: int = data.get(CONF_END_OFFSET, DEFAULT_END_OFFSET)
-        self.trigger_time: str = data[CONF_TRIGGER_TIME]
+        self.trigger_time: str = data.get(CONF_TRIGGER_TIME, DEFAULT_TRIGGER_TIME)
         self.end_time: str = data.get(CONF_END_TIME, DEFAULT_END_TIME)
         self.extras: list[dict] = [
             dict(e) for e in data.get(CONF_EXTRAS, [])
@@ -170,7 +174,18 @@ class NightLightManager:
         self.day_kelvin: int = data.get(
             CONF_DAY_COLOR_TEMP_KELVIN, DEFAULT_DAY_COLOR_TEMP_KELVIN
         )
-        self.overrides: dict[str, dict] = data.get(CONF_OVERRIDES, {})
+        # 逐灯覆盖做深拷贝，避免就地修改 entry.data；同时清理已缩减时段的残留索引
+        self.overrides: dict[str, dict] = copy.deepcopy(data.get(CONF_OVERRIDES, {}))
+        for ovr in self.overrides.values():
+            extras_ovr = ovr.get(OVR_EXTRAS)
+            if isinstance(extras_ovr, dict):
+                stale = [
+                    key
+                    for key in extras_ovr
+                    if not str(key).isdigit() or int(key) >= len(self.extras)
+                ]
+                for key in stale:
+                    del extras_ovr[key]
         self.machines: dict[str, LightMachine] = {
             light: LightMachine(entity_id=light) for light in self.lights
         }
@@ -178,6 +193,10 @@ class NightLightManager:
         self._unsub_state = None
         self._unsub_sun = None
         self._unsub_tick = None
+        # async_call_later 句柄集中管理，stop() 时全部取消 (M1)
+        self._pending_delays: set = set()
+        self._stopped = False
+        self._warned_sun_missing: set[str] = set()
 
     @property
     def _has_transitions(self) -> bool:
@@ -215,6 +234,7 @@ class NightLightManager:
 
     def start(self) -> None:
         """Schedule the daily trigger at the night-start anchor."""
+        self._stopped = False
         self._schedule_trigger()
         if self._uses_custom_sun_entity():
             self._unsub_sun = async_track_state_change_event(
@@ -226,6 +246,7 @@ class NightLightManager:
                 self._async_transition_tick,
                 timedelta(minutes=self.transition_interval),
             )
+            self._warn_overlapping_bands()
             _LOGGER.info(
                 "Transition bands active, ticking every %d min",
                 self.transition_interval,
@@ -244,7 +265,8 @@ class NightLightManager:
         )
 
     def stop(self) -> None:
-        """Cancel the schedule and the listeners."""
+        """Cancel the schedule, the listeners and every pending delay."""
+        self._stopped = True
         for unsub in (
             self._unsub_time,
             self._unsub_state,
@@ -257,6 +279,20 @@ class NightLightManager:
         self._unsub_state = None
         self._unsub_sun = None
         self._unsub_tick = None
+        for cancel in self._pending_delays:
+            cancel()
+        self._pending_delays.clear()
+
+    def _delay(self, delay: float, action) -> None:
+        """Schedule ``action`` after ``delay`` seconds; tracked for stop() (M1)."""
+        handle = None
+
+        def _wrap(now):
+            self._pending_delays.discard(handle)
+            action(now)
+
+        handle = async_call_later(self.hass, delay, _wrap)
+        self._pending_delays.add(handle)
 
     def _uses_custom_sun_entity(self) -> bool:
         """Return True if any anchor relies on a non-default sun entity."""
@@ -276,11 +312,19 @@ class NightLightManager:
                 value = dt_util.parse_datetime(state.attributes.get(event_attr, ""))
                 if value is not None:
                     return value
-            _LOGGER.warning(
-                "%s missing %s, falling back to astral calculation",
-                self.sun_entity,
-                event_attr,
-            )
+            if event_attr not in self._warned_sun_missing:
+                self._warned_sun_missing.add(event_attr)
+                _LOGGER.warning(
+                    "%s missing %s, falling back to astral calculation",
+                    self.sun_entity,
+                    event_attr,
+                )
+            else:
+                _LOGGER.debug(
+                    "%s still missing %s, using astral calculation",
+                    self.sun_entity,
+                    event_attr,
+                )
         try:
             return get_astral_event_date(self.hass, sun_event, date)
         except Exception as err:  # noqa: BLE001
@@ -331,6 +375,15 @@ class NightLightManager:
             )
             if candidate > now:
                 return candidate
+            if self.sun_entity != DEFAULT_SUN_ENTITY:
+                # 自定义 sun 实体只暴露“下一次”事件这一个数据点，拿不到
+                # 之后的下一次（M4）。单日语义：等实体在事件过后刷新属性时
+                # 会触发重排，这里先退回固定时间兜底。
+                _LOGGER.debug(
+                    "%s only exposes its next event; falling back to fixed time",
+                    self.sun_entity,
+                )
+                break
         _LOGGER.warning("Sun-based start anchor unavailable, using fixed time")
         return _fixed_next()
 
@@ -349,13 +402,47 @@ class NightLightManager:
         _LOGGER.info("Night light trigger scheduled at %s", when)
 
     async def _async_anchor_trigger(self, _now) -> None:
-        """Fire at the night-start anchor, then schedule the next round."""
-        await self.async_trigger(reason="anchor")
-        self._schedule_trigger()
+        """Fire at the night-start anchor, then schedule the next round.
 
-    async def _async_sun_entity_changed(self, _event) -> None:
-        """Reschedule when the custom sun entity updates its times."""
-        self._schedule_trigger()
+        无论本轮触发是否抛异常，都必须重排下一次触发，否则集成会静默停摆 (M5)。
+        """
+        try:
+            await self.async_trigger(reason="anchor")
+        finally:
+            self._schedule_trigger()
+
+    async def _async_sun_entity_changed(
+        self, event: Event[EventStateChangedData]
+    ) -> None:
+        """Reschedule only when the custom sun entity's next-event times change (L1)."""
+        new_state = event.data.get("new_state")
+        old_state = event.data.get("old_state")
+        if new_state is None:
+            return
+        for attr in ("next_rising", "next_setting"):
+            new_value = new_state.attributes.get(attr)
+            old_value = old_state.attributes.get(attr) if old_state is not None else None
+            if new_value != old_value:
+                _LOGGER.debug("%s %s changed, rescheduling", self.sun_entity, attr)
+                self._schedule_trigger()
+                return
+
+    def _warn_overlapping_bands(self) -> None:
+        """Warn when transition bands overlap — the earlier band wins (L4)."""
+        bands = self._transition_bands()
+        for i, (anchor_min, target, dur) in enumerate(bands):
+            band_start = (anchor_min - dur) % 1440
+            for j, (other_min, other_target, other_dur) in enumerate(bands):
+                if i == j:
+                    continue
+                other_start = (other_min - other_dur) % 1440
+                if (other_start - band_start) % 1440 < dur % 1440:
+                    _LOGGER.warning(
+                        "过渡带重叠：'%s' 的起点落在 '%s' 带内，重叠期间按 '%s' 插值",
+                        other_target,
+                        target,
+                        target,
+                    )
 
     def _night_anchor_times(self) -> tuple:
         """Resolve (night start, night end) anchor times-of-day."""
@@ -393,11 +480,6 @@ class NightLightManager:
             if best_delta is None or delta < best_delta:
                 best_mode, best_delta = mode, delta
         return best_mode
-
-    def current_mode(self) -> str | None:
-        """Resolve the active period from time anchors (no transitions)."""
-        now = dt_util.now().time()
-        return self._mode_at(now.hour * 60 + now.minute)
 
     def _transition_bands(self) -> list[tuple]:
         """Return [(anchor_minutes, target_mode, duration_min)] for active bands."""
@@ -508,19 +590,35 @@ class NightLightManager:
             kelvin,
             self.settle_delay,
         )
-        self.hass.loop.call_later(
+        self._delay(
             self.settle_delay,
-            lambda: self.hass.async_create_task(
+            lambda _now: self.hass.async_create_task(
                 self._async_process_light(entity_id, brightness, kelvin)
             ),
         )
 
     async def async_trigger(self, reason: str = "manual") -> None:
-        """Run one check-and-set round for all lights."""
+        """Run one check-and-set round for all lights (concurrent per light).
+
+        使用当前时段参数而非硬编码夜间参数 (M2)，白天手动触发不会再把灯
+        调到夜间亮度；逐灯并发避免灯具多时串行等待拖长整轮时间 (L5)。
+        """
         _LOGGER.info("Auto night light triggered (%s)", reason)
-        for entity_id in self.lights:
-            brightness, kelvin = self.params_for(entity_id, MODE_NIGHT)
-            await self._async_process_light(entity_id, brightness, kelvin)
+
+        async def _one(entity_id: str) -> None:
+            params = self.current_params(entity_id)
+            if params is None:
+                _LOGGER.debug("%s outside all active periods, skipped", entity_id)
+                return
+            await self._async_process_light(entity_id, *params)
+
+        results = await asyncio.gather(
+            *(_one(entity_id) for entity_id in self.lights),
+            return_exceptions=True,
+        )
+        for entity_id, result in zip(self.lights, results):
+            if isinstance(result, Exception):
+                _LOGGER.error("%s trigger round failed: %s", entity_id, result)
 
     @staticmethod
     def _to_pct(brightness_byte: int) -> int:
@@ -547,12 +645,19 @@ class NightLightManager:
         if state.state != STATE_ON:
             return False
         cur_brightness = state.attributes.get(ATTR_BRIGHTNESS)
-        cur_kelvin = state.attributes.get(ATTR_COLOR_TEMP_KELVIN)
         if cur_brightness is None:
             return False
         if abs(self._to_pct(cur_brightness) - brightness) > self.tol_brightness:
             return False
         # 灯具不支持/未上报色温时仅校验亮度
+        if not self._supports_color_temp(state):
+            return True
+        # 支持色温但当前处于彩光（hs/rgb）模式：状态里没有 color_temp_kelvin，
+        # 不能视为已匹配，需要纠回色温 (M3)
+        color_mode = state.attributes.get("color_mode")
+        if color_mode is not None and color_mode != "color_temp":
+            return False
+        cur_kelvin = state.attributes.get(ATTR_COLOR_TEMP_KELVIN)
         if cur_kelvin is not None and abs(cur_kelvin - kelvin) > self.tol_kelvin:
             return False
         return True
@@ -562,6 +667,8 @@ class NightLightManager:
         allow_turn_on: bool = True,
     ) -> None:
         """Advance the state machine for one light."""
+        if self._stopped:
+            return
         machine = self.machines[entity_id]
         machine.state = LightState.PENDING
         state = self.hass.states.get(entity_id)
@@ -589,7 +696,8 @@ class NightLightManager:
             ATTR_BRIGHTNESS: self._to_byte(brightness),
         }
         if self._supports_color_temp(state):
-            service_data[ATTR_COLOR_TEMP_KELVIN] = kelvin
+            # NumberSelector 可能给出 float，个别灯平台对类型严格校验 (L9)
+            service_data[ATTR_COLOR_TEMP_KELVIN] = int(kelvin)
         _LOGGER.info(
             "%s mismatch (brightness=%s kelvin=%s), setting to %s%%/%sK",
             entity_id,
@@ -609,13 +717,15 @@ class NightLightManager:
             return
 
         # 延迟验证，避免灯具状态尚未刷新
-        self.hass.loop.call_later(
+        self._delay(
             self.verify_delay,
-            lambda: self.hass.async_create_task(self._async_verify(entity_id)),
+            lambda _now: self.hass.async_create_task(self._async_verify(entity_id)),
         )
 
     async def _async_verify(self, entity_id: str) -> None:
         """Verify the light reached the target after control."""
+        if self._stopped:
+            return
         machine = self.machines[entity_id]
         state = self.hass.states.get(entity_id)
         target = machine.target or self.params_for(entity_id, MODE_NIGHT)

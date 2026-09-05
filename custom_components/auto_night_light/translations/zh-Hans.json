@@ -76,7 +76,17 @@
           "brightness": "夜间亮度（%）",
           "color_temp_kelvin": "夜间色温",
           "day_brightness": "日间亮度（%）",
-          "day_color_temp_kelvin": "日间色温"
+          "day_color_temp_kelvin": "日间色温",
+          "extra_0_brightness": "额外时段 1 亮度 (%)",
+          "extra_0_kelvin": "额外时段 1 色温",
+          "extra_1_brightness": "额外时段 2 亮度 (%)",
+          "extra_1_kelvin": "额外时段 2 色温",
+          "extra_2_brightness": "额外时段 3 亮度 (%)",
+          "extra_2_kelvin": "额外时段 3 色温",
+          "extra_3_brightness": "额外时段 4 亮度 (%)",
+          "extra_3_kelvin": "额外时段 4 色温",
+          "extra_4_brightness": "额外时段 5 亮度 (%)",
+          "extra_4_kelvin": "额外时段 5 色温"
         }
       },
       "reconfigure": {
@@ -172,7 +182,17 @@
           "brightness": "夜间亮度（%）",
           "color_temp_kelvin": "夜间色温",
           "day_brightness": "日间亮度（%）",
-          "day_color_temp_kelvin": "日间色温"
+          "day_color_temp_kelvin": "日间色温",
+          "extra_0_brightness": "额外时段 1 亮度 (%)",
+          "extra_0_kelvin": "额外时段 1 色温",
+          "extra_1_brightness": "额外时段 2 亮度 (%)",
+          "extra_1_kelvin": "额外时段 2 色温",
+          "extra_2_brightness": "额外时段 3 亮度 (%)",
+          "extra_2_kelvin": "额外时段 3 色温",
+          "extra_3_brightness": "额外时段 4 亮度 (%)",
+          "extra_3_kelvin": "额外时段 4 色温",
+          "extra_4_brightness": "额外时段 5 亮度 (%)",
+          "extra_4_kelvin": "额外时段 5 色温"
         }
       }
     },

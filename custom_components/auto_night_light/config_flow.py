@@ -680,30 +680,30 @@ class AutoNightLightConfigFlow(_FlowMixin, ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry):
         """Return the options flow."""
-        return AutoNightLightOptionsFlow(config_entry)
+        return AutoNightLightOptionsFlow()
 
 
 class AutoNightLightOptionsFlow(_FlowMixin, OptionsFlow):
     """Allow re-editing times, extras, lights, settings and per-light overrides."""
 
-    def __init__(self, config_entry) -> None:
-        """Store the config entry."""
-        self._entry = config_entry
+    def __init__(self) -> None:
+        """Initialize flow state; the entry is prefilled lazily (L6)."""
         self._init_state()
-        current = self._current
-        self._extras = [dict(e) for e in current.get(CONF_EXTRAS, [])]
-        self._extra_count = len(self._extras)
-        self._custom_lights = list(current.get(CONF_CUSTOM_PER_LIGHT, []))
-        self._overrides = dict(current.get(CONF_OVERRIDES, {}))
-        self._defaults = current
-        self._suggest = current
 
     @property
     def _current(self) -> dict:
-        return {**self._entry.data, **self._entry.options}
+        return {**self.config_entry.data, **self.config_entry.options}
 
     async def async_step_init(self, user_input=None) -> ConfigFlowResult:
         """Step 1: time settings, prefilled with current values."""
+        if self._suggest is None:
+            current = self._current
+            self._extras = [dict(e) for e in current.get(CONF_EXTRAS, [])]
+            self._extra_count = len(self._extras)
+            self._custom_lights = list(current.get(CONF_CUSTOM_PER_LIGHT, []))
+            self._overrides = dict(current.get(CONF_OVERRIDES, {}))
+            self._defaults = current
+            self._suggest = current
         return await self._handle_time_step(user_input, "init")
 
     async def async_step_time_details(self, user_input=None) -> ConfigFlowResult:

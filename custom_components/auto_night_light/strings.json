@@ -76,7 +76,17 @@
           "brightness": "Night brightness (%)",
           "color_temp_kelvin": "Night color temperature",
           "day_brightness": "Daytime brightness (%)",
-          "day_color_temp_kelvin": "Daytime color temperature"
+          "day_color_temp_kelvin": "Daytime color temperature",
+          "extra_0_brightness": "Extra period 1 brightness (%)",
+          "extra_0_kelvin": "Extra period 1 color temperature",
+          "extra_1_brightness": "Extra period 2 brightness (%)",
+          "extra_1_kelvin": "Extra period 2 color temperature",
+          "extra_2_brightness": "Extra period 3 brightness (%)",
+          "extra_2_kelvin": "Extra period 3 color temperature",
+          "extra_3_brightness": "Extra period 4 brightness (%)",
+          "extra_3_kelvin": "Extra period 4 color temperature",
+          "extra_4_brightness": "Extra period 5 brightness (%)",
+          "extra_4_kelvin": "Extra period 5 color temperature"
         }
       },
       "reconfigure": {
@@ -172,7 +182,17 @@
           "brightness": "Night brightness (%)",
           "color_temp_kelvin": "Night color temperature",
           "day_brightness": "Daytime brightness (%)",
-          "day_color_temp_kelvin": "Daytime color temperature"
+          "day_color_temp_kelvin": "Daytime color temperature",
+          "extra_0_brightness": "Extra period 1 brightness (%)",
+          "extra_0_kelvin": "Extra period 1 color temperature",
+          "extra_1_brightness": "Extra period 2 brightness (%)",
+          "extra_1_kelvin": "Extra period 2 color temperature",
+          "extra_2_brightness": "Extra period 3 brightness (%)",
+          "extra_2_kelvin": "Extra period 3 color temperature",
+          "extra_3_brightness": "Extra period 4 brightness (%)",
+          "extra_3_kelvin": "Extra period 4 color temperature",
+          "extra_4_brightness": "Extra period 5 brightness (%)",
+          "extra_4_kelvin": "Extra period 5 color temperature"
         }
       }
     },
