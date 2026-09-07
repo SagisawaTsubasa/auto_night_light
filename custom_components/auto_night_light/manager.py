@@ -285,8 +285,11 @@ class NightLightManager:
 
     def _delay(self, delay: float, action) -> None:
         """Schedule ``action`` after ``delay`` seconds; tracked for stop() (M1)."""
+        if self._stopped:
+            return
         handle = None
 
+        @callback
         def _wrap(now):
             self._pending_delays.discard(handle)
             action(now)
@@ -409,7 +412,8 @@ class NightLightManager:
         try:
             await self.async_trigger(reason="anchor")
         finally:
-            self._schedule_trigger()
+            if not self._stopped:
+                self._schedule_trigger()
 
     async def _async_sun_entity_changed(
         self, event: Event[EventStateChangedData]
