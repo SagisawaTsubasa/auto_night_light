@@ -147,3 +147,19 @@ logger:
 ## 作者
 
 主程序：Kimi
+
+## 更新日志 / Changelog
+
+### 2.0.2
+- 补记 2.0.1（未随版本文档化）：stop() 之后再不调度延迟动作、锚点刷新循环在停止后退出  
+  Backfill 2.0.1 (was undocumented): delayed actions no longer scheduled after stop(); anchor refresh loop exits once stopped
+- 修复：`translations/en.json` 与英文源 `strings.json` 对齐（此前缺 20 个 extra_{i}_* 翻译键，英文界面缺失字段文案）  
+  Fixed: `translations/en.json` aligned with the English source `strings.json` (20 extra_{i}_* keys were missing)
+- 清理：ruff 告警清零（import 排序、`int | float` 注解、否定条件直返）  
+  Chores: ruff warnings cleared (import order, `int | float` annotation, direct negated return)
+- 评估记录：V2.0 重构（223f7b6）已移除审查报告 §三 低-2 所指的 `current_mode()` 死代码，该项闭环  
+  Note: the `current_mode()` dead code flagged by the audit (report §3 low-2) was already removed in the V2.0 rewrite — item closed
+
+### 2.0.0 / 2.0.1（2026-09-05/07 审计修复批次）
+- trigger_time 带默认值、迁移链清理、翻译补齐等审计修复；2.0.1 为停止防护 hotfix  
+  September audit fixes (defaults, migration cleanup, translations); 2.0.1 was a stop-guard hotfix

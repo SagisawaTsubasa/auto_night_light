@@ -9,13 +9,15 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+import homeassistant.util.dt as dt_util
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
     ATTR_COLOR_TEMP_KELVIN,
+)
+from homeassistant.components.light import (
     DOMAIN as LIGHT_DOMAIN,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import Event, EventStateChangedData, HomeAssistant, State, callback
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     SERVICE_TURN_ON,
@@ -26,6 +28,13 @@ from homeassistant.const import (
     SUN_EVENT_SUNRISE,
     SUN_EVENT_SUNSET,
 )
+from homeassistant.core import (
+    Event,
+    EventStateChangedData,
+    HomeAssistant,
+    State,
+    callback,
+)
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_point_in_time,
@@ -33,7 +42,6 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.helpers.sun import get_astral_event_date
-import homeassistant.util.dt as dt_util
 
 from .const import (
     ANCHOR_FIXED,
@@ -47,6 +55,7 @@ from .const import (
     CONF_END_MODE,
     CONF_END_OFFSET,
     CONF_END_TIME,
+    CONF_END_TRANSITION,
     CONF_EXTRAS,
     CONF_LIGHTS,
     CONF_ONLY_WHEN_ON,
@@ -58,10 +67,9 @@ from .const import (
     CONF_SUN_ENTITY,
     CONF_TOLERANCE_BRIGHTNESS,
     CONF_TOLERANCE_KELVIN,
-    CONF_TRIGGER_TIME,
-    CONF_END_TRANSITION,
     CONF_TRANSITION_ENABLED,
     CONF_TRANSITION_INTERVAL,
+    CONF_TRIGGER_TIME,
     CONF_TURN_ON_LISTEN,
     CONF_VERIFY_DELAY,
     DEFAULT_BRIGHTNESS,
@@ -76,10 +84,10 @@ from .const import (
     DEFAULT_START_OFFSET,
     DEFAULT_SUN_ENTITY,
     DEFAULT_TOLERANCE_BRIGHTNESS,
-    DEFAULT_TRANSITION_INTERVAL,
     DEFAULT_TOLERANCE_KELVIN,
-    DEFAULT_TURN_ON_LISTEN,
+    DEFAULT_TRANSITION_INTERVAL,
     DEFAULT_TRIGGER_TIME,
+    DEFAULT_TURN_ON_LISTEN,
     DEFAULT_VERIFY_DELAY,
     EXTRA_BRIGHTNESS,
     EXTRA_COLOR_TEMP_KELVIN,
@@ -630,7 +638,7 @@ class NightLightManager:
         return round(brightness_byte * 100 / 255)
 
     @staticmethod
-    def _to_byte(brightness_pct: int | float) -> int:
+    def _to_byte(brightness_pct: float) -> int:
         """Convert percent (1-100) to HA brightness (1-255)."""
         return min(255, max(1, round(brightness_pct * 255 / 100)))
 
@@ -662,9 +670,7 @@ class NightLightManager:
         if color_mode is not None and color_mode != "color_temp":
             return False
         cur_kelvin = state.attributes.get(ATTR_COLOR_TEMP_KELVIN)
-        if cur_kelvin is not None and abs(cur_kelvin - kelvin) > self.tol_kelvin:
-            return False
-        return True
+        return cur_kelvin is None or abs(cur_kelvin - kelvin) <= self.tol_kelvin
 
     async def _async_process_light(
         self, entity_id: str, brightness: int, kelvin: int,

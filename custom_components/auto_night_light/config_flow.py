@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import voluptuous as vol
-
 from homeassistant.config_entries import (
     SOURCE_RECONFIGURE,
     ConfigFlow,
@@ -36,16 +35,16 @@ from .const import (
     CONF_DAY_BRIGHTNESS,
     CONF_DAY_COLOR_TEMP_KELVIN,
     CONF_DAY_ENABLED,
+    CONF_END_MODE,
+    CONF_END_OFFSET,
     CONF_END_TIME,
+    CONF_END_TRANSITION,
     CONF_EXTRA_COUNT,
     CONF_EXTRA_ENABLED,
     CONF_EXTRAS,
     CONF_LIGHTS,
     CONF_ONLY_WHEN_ON,
     CONF_OVERRIDES,
-    CONF_END_MODE,
-    CONF_END_OFFSET,
-    CONF_END_TRANSITION,
     CONF_SETTLE_DELAY,
     CONF_START_MODE,
     CONF_START_OFFSET,
@@ -62,17 +61,17 @@ from .const import (
     DEFAULT_COLOR_TEMP_KELVIN,
     DEFAULT_DAY_BRIGHTNESS,
     DEFAULT_DAY_COLOR_TEMP_KELVIN,
+    DEFAULT_END_OFFSET,
     DEFAULT_END_TIME,
     DEFAULT_EXTRA_BRIGHTNESS,
     DEFAULT_EXTRA_COLOR_TEMP_KELVIN,
     DEFAULT_EXTRA_START,
-    DEFAULT_END_OFFSET,
     DEFAULT_SETTLE_DELAY,
     DEFAULT_START_OFFSET,
     DEFAULT_SUN_ENTITY,
     DEFAULT_TOLERANCE_BRIGHTNESS,
-    DEFAULT_TRANSITION_INTERVAL,
     DEFAULT_TOLERANCE_KELVIN,
+    DEFAULT_TRANSITION_INTERVAL,
     DEFAULT_TURN_ON_LISTEN,
     DEFAULT_VERIFY_DELAY,
     DOMAIN,
@@ -91,6 +90,7 @@ from .const import (
     OVR_EXTRA_COLOR_TEMP_KELVIN,
     OVR_EXTRAS,
 )
+
 
 def _pct_selector(key: str, default: int) -> tuple:
     return vol.Required(key, default=default), NumberSelector(
