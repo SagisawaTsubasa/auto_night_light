@@ -138,6 +138,8 @@ class LightMachine:
     # 过渡带内状态（v2.1.0 定点调度引擎）
     band_key: tuple | None = field(default=None)  # 当前所在带身份
     expected: tuple[int, int] | None = field(default=None)  # 本带最近预期值
+    applied: tuple[int, int] | None = field(default=None)  # 我方最后成功下发的参数
+    mismatch_steps: int = field(default=0)  # 连续偏离预期的步数
     manual_override: bool = field(default=False)  # 本带内已被手动接管
 
 
@@ -344,9 +346,15 @@ class NightLightManager:
         if self.sun_entity != DEFAULT_SUN_ENTITY:
             state = self.hass.states.get(self.sun_entity)
             if state is not None:
-                value = dt_util.parse_datetime(state.attributes.get(event_attr, ""))
-                if value is not None:
+                value = state.attributes.get(event_attr)
+                if isinstance(value, datetime):
+                    # sun.sun 的 next_* 属性是原生 datetime 对象
                     return value
+                parsed = (
+                    dt_util.parse_datetime(value) if isinstance(value, str) else None
+                )
+                if parsed is not None:
+                    return parsed
             if event_attr not in self._warned_sun_missing:
                 self._warned_sun_missing.add(event_attr)
                 _LOGGER.warning(
@@ -466,19 +474,25 @@ class NightLightManager:
                 return
 
     def _warn_overlapping_bands(self) -> None:
-        """Warn when transition bands overlap — the earlier band wins (L4)."""
+        """Warn when transition bands overlap.
+
+        胜出规则 = 列表序（额外时段优先，其次夜间、日间），与
+        _band_params 首匹配和计划 claim 一致 (P3-2)。
+        """
         bands = self._transition_bands()
         for i, (anchor_min, target, dur) in enumerate(bands):
-            band_start = (anchor_min - dur) % 1440
-            for j, (other_min, other_target, other_dur) in enumerate(bands):
-                if i == j:
-                    continue
-                other_start = (other_min - other_dur) % 1440
-                if (other_start - band_start) % 1440 < dur % 1440:
+            start_a = (anchor_min - dur) % 1440
+            for other_min, other_target, other_dur in bands[i + 1 :]:
+                start_b = (other_min - other_dur) % 1440
+                # 环形区间相交：任一带起点落在另一带内
+                if (start_a - start_b) % 1440 < other_dur or (
+                    start_b - start_a
+                ) % 1440 < dur:
                     _LOGGER.warning(
-                        "过渡带重叠：'%s' 的起点落在 '%s' 带内，重叠期间按 '%s' 插值",
-                        other_target,
+                        "过渡带重叠：'%s' 与 '%s'，重叠区按列表序靠前的 "
+                        "'%s' 插值（额外时段优先于夜间/日间锚点）",
                         target,
+                        other_target,
                         target,
                     )
 
@@ -597,8 +611,17 @@ class NightLightManager:
         if self._stopped or not self._has_transitions:
             return
         now = dt_util.now()
-        claimed: set[tuple[datetime, str]] = set()
-        for anchor_min, target_mode, dur in self._transition_bands():
+        # 全部带窗口（半开 [start, start+dur)），按 _transition_bands 列表序。
+        # 步进是否生成用"窗口包含"判定而非精确时刻去重——两条带网格错位时
+        # 精确去重会漏，导致重叠区交替下发并互相重置接管状态 (P2)。
+        all_windows = [
+            ((anchor_min - dur) % 1440, dur)
+            for anchor_min, _, dur in self._transition_bands()
+        ]
+        scheduled_windows: list[tuple[int, int]] = []
+        for band_i, (anchor_min, target_mode, dur) in enumerate(
+            self._transition_bands()
+        ):
             band_start_min = (anchor_min - dur) % 1440
             start = upcoming_band_start(now, band_start_min, dur)
             if start is None:
@@ -606,24 +629,35 @@ class NightLightManager:
             anchor_dt = start + timedelta(minutes=dur)
             from_mode = self._mode_at(band_start_min)
             if from_mode is None:
+                # 起点无生效模式：该带不生成步进，但窗口仍占位——与
+                # _band_params 的首匹配短路语义保持一致 (P3-1)
                 _LOGGER.debug(
                     "Band ending at %s has no active from-mode, not scheduled",
                     anchor_dt,
                 )
+                scheduled_windows.append((band_start_min, dur))
                 continue
-            band_key = (band_start_min, target_mode, start.date().isoformat())
+            band_key = (target_mode, start.date().isoformat())
+            # 半开窗口不含自己的锚点分钟：锚点步（factor=1）只有在没有
+            # 更靠后的带覆盖该分钟时才生成，否则与后继带的步进同刻冲突
+            later_covers_anchor = any(
+                (anchor_min - win_start) % 1440 < win_dur
+                for win_start, win_dur in all_windows[band_i + 1 :]
+            )
             for step_dt in step_datetimes(start, anchor_dt, self.transition_interval):
                 if step_dt <= now:
                     continue  # 已过去的步进不补发
+                if step_dt == anchor_dt and later_covers_anchor:
+                    continue
+                step_min = step_dt.hour * 60 + step_dt.minute
+                if any(
+                    (step_min - win_start) % 1440 < win_dur
+                    for win_start, win_dur in scheduled_windows
+                ):
+                    continue  # 靠前的带在该时刻胜出（首匹配语义）
                 factor = (step_dt - start).total_seconds() / 60 / dur
                 entrance = step_dt == start
                 for entity_id in self.lights:
-                    # 重叠带去重：与 _band_params 相同的优先序，先处理的带
-                    # 胜出，保证重叠区只有一条带在控（否则接管状态互相踩）
-                    claim = (step_dt, entity_id)
-                    if claim in claimed:
-                        continue
-                    claimed.add(claim)
                     b, k = lerp_params(
                         self.params_for(entity_id, from_mode),
                         self.params_for(entity_id, target_mode),
@@ -632,9 +666,22 @@ class NightLightManager:
                     self._plan.setdefault(step_dt, []).append(
                         PlanStep(entity_id, b, k, band_key, entrance)
                     )
+            scheduled_windows.append((band_start_min, dur))
         for when, steps in self._plan.items():
+            # 兜底去重：窗口是半开的、不含各自的锚点分钟，两条带共享锚点
+            # 分钟时双方都生成同刻步进。保留列表序靠前带的一条——与
+            # _mode_at 平局规则（额外时段优先）一致 (P1-1)。
+            seen_entities: set[str] = set()
+            unique_steps = [
+                step
+                for step in steps
+                if not (
+                    step.entity_id in seen_entities or seen_entities.add(step.entity_id)
+                )
+            ]
+            self._plan[when] = unique_steps
             self._plan_unsub[when] = async_track_point_in_time(
-                self.hass, self._make_plan_step_callback(when, steps), when
+                self.hass, self._make_plan_step_callback(when, unique_steps), when
             )
         _LOGGER.info("Transition plan rebuilt: %d step point(s)", len(self._plan))
 
@@ -650,65 +697,97 @@ class NightLightManager:
 
     async def _async_run_steps(self, steps: list[PlanStep]) -> None:
         """Execute one step point: band-entry reset, takeover check, steer."""
-        for step in steps:
-            machine = self.machines.get(step.entity_id)
-            if machine is None:
-                continue
-            if machine.state == LightState.TURN_ON_PENDING:
-                # 开灯监听已在处理（settle delay 中），等其重新播种预期，
-                # 否则刚开灯的默认态会被误判成手动调节 (P3 竞态)
-                continue
-            if machine.band_key != step.band_key:
-                # 带入口：清接管；预期值仅入口步播种（=起点参数）。
-                # 入带时不在曲线上的灯（已处夜间参数/被手动调过）在这里
-                # 被判接管，整带保持现状——带内手动优先，锚点归位。
-                # 中途入表（重启/重建后首观测步非入口）预期置 None：跳过
-                # 一次判定，按旧行为拉回曲线一次后再正常判定 (P1)。
-                machine.band_key = step.band_key
-                machine.manual_override = False
-                machine.expected = (
-                    (step.brightness, step.kelvin) if step.entrance else None
-                )
-            if machine.manual_override:
-                _LOGGER.debug("%s manual override active, step skipped", step.entity_id)
-                continue
-            state = self.hass.states.get(step.entity_id)
-            if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-                continue
-            # 接管判定只在可核验（亮且上报亮度）时进行；关灯/无亮度上报
-            # 不判接管 (P2a)
-            verifiable = state.state == STATE_ON and (
-                state.attributes.get(ATTR_BRIGHTNESS) is not None
+        if self._stopped:
+            return
+        results = await asyncio.gather(
+            *(self._async_run_step(step) for step in steps),
+            return_exceptions=True,
+        )
+        for step, result in zip(steps, results):
+            if isinstance(result, Exception):
+                _LOGGER.error("%s step failed: %s", step.entity_id, result)
+
+    async def _async_run_step(self, step: PlanStep) -> None:
+        """Process one light's scheduled step (P3-7: 逐灯并发，互不阻塞)."""
+        if self._stopped:
+            return
+        machine = self.machines.get(step.entity_id)
+        if machine is None:
+            return
+        if machine.state == LightState.TURN_ON_PENDING:
+            # 开灯监听已在处理（settle delay 中），等其重新播种预期，
+            # 否则刚开灯的默认态会被误判成手动调节 (P3 竞态)
+            return
+        if machine.band_key != step.band_key:
+            # 带入口：清接管；预期值仅入口步播种（=起点参数）。
+            # 入带时不在曲线上的灯（已处夜间参数/被手动调过）在这里
+            # 被判接管，整带保持现状——带内手动优先，锚点归位。
+            # 中途入表（重启/重建后首观测步非入口）预期置 None：跳过
+            # 一次判定，按旧行为拉回曲线一次后再正常判定 (P1)。
+            machine.band_key = step.band_key
+            machine.manual_override = False
+            machine.mismatch_steps = 0
+            machine.expected = (step.brightness, step.kelvin) if step.entrance else None
+        if machine.manual_override:
+            _LOGGER.debug("%s manual override active, step skipped", step.entity_id)
+            return
+        state = self.hass.states.get(step.entity_id)
+        if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            # 不可观测步不计数：「连续 2 步」只统计可核验的步 (P3-5)
+            machine.mismatch_steps = 0
+            return
+        # 接管判定只在可核验（亮且上报亮度）时进行；关灯/无亮度上报
+        # 不判接管 (P2a)
+        verifiable = state.state == STATE_ON and (
+            state.attributes.get(ATTR_BRIGHTNESS) is not None
+        )
+        if verifiable and machine.expected is not None:
+            # 在曲线 = 匹配预期值，或匹配我方最后成功下发的参数——
+            # from-mode 参数可能从未下发给常亮灯，不能只认预期值 (P2-3)
+            on_curve = self._matches(state, *machine.expected) or (
+                machine.applied is not None and self._matches(state, *machine.applied)
             )
-            if (
-                self.respect_manual
-                and verifiable
-                and machine.expected is not None
-                and not self._matches(state, *machine.expected)
-            ):
-                machine.manual_override = True
-                _LOGGER.info(
-                    "%s manual change detected (current %s/%sK, expected "
-                    "%s%%/%sK) — light left alone until next anchor",
-                    step.entity_id,
-                    state.attributes.get(ATTR_BRIGHTNESS),
-                    state.attributes.get(ATTR_COLOR_TEMP_KELVIN),
-                    machine.expected[0],
-                    machine.expected[1],
-                )
-                continue
-            ok = await self._async_process_light(
-                step.entity_id,
-                step.brightness,
-                step.kelvin,
-                allow_turn_on=False,
-                transition_s=self.transition_interval * 60,
-            )
-            # 仅在确实生效（已匹配或下发成功）时推进预期；服务失败保持
-            # 上次预期，下一步可重试且不会误判接管 (P2b)。不可核验的灯
-            # 不推进预期，后续步持续跳过接管判定。
-            if ok and verifiable:
-                machine.expected = (step.brightness, step.kelvin)
+            if not on_curve:
+                machine.mismatch_steps += 1
+                # 入口步保持单次判定（既定带入口语义）；带内连续 2 步不符
+                # 才判接管——单步偏差可能只是回读滞后或灯具能力边界 (P2-1)
+                if self.respect_manual and (
+                    step.entrance or machine.mismatch_steps >= 2
+                ):
+                    machine.manual_override = True
+                    _LOGGER.info(
+                        "%s manual change detected (current %s/%sK, expected "
+                        "%s%%/%sK) — light left alone until next anchor",
+                        step.entity_id,
+                        state.attributes.get(ATTR_BRIGHTNESS),
+                        state.attributes.get(ATTR_COLOR_TEMP_KELVIN),
+                        machine.expected[0],
+                        machine.expected[1],
+                    )
+                    return
+                # 带内首次偏离：视为手动调节的观测，本步不下发——手动值
+                # 一次都不被拉回；下一步仍偏离即接管，回到曲线则计数清零
+                if self.respect_manual:
+                    _LOGGER.debug(
+                        "%s first mismatch observed, not steering this step",
+                        step.entity_id,
+                    )
+                    return
+            else:
+                machine.mismatch_steps = 0
+        ok = await self._async_process_light(
+            step.entity_id,
+            step.brightness,
+            step.kelvin,
+            allow_turn_on=False,
+            transition_s=self.transition_interval * 60,
+        )
+        # 仅在确实生效（已匹配或下发成功）时推进预期；服务失败保持
+        # 上次预期，下一步可重试且不会误判接管 (P2b)。不可核验的灯
+        # 不推进预期，后续步持续跳过接管判定。
+        if ok and verifiable:
+            machine.expected = (step.brightness, step.kelvin)
+            machine.applied = (step.brightness, step.kelvin)
 
     async def _async_light_state_changed(
         self, event: Event[EventStateChangedData]
@@ -736,8 +815,9 @@ class NightLightManager:
                 "%s not in machine table (stale listener?), skipped", entity_id
             )
             return
-        # 关→开重新加入曲线：清接管并重设预期基准
+        # 关→开重新加入曲线：清接管并重设预期基准与计数
         machine.manual_override = False
+        machine.mismatch_steps = 0
         machine.expected = params
         machine.state = LightState.TURN_ON_PENDING
         _LOGGER.info(
@@ -750,9 +830,28 @@ class NightLightManager:
         self._delay(
             self.settle_delay,
             lambda _now: self.hass.async_create_task(
-                self._async_process_light(entity_id, brightness, kelvin)
+                self._async_settle_apply(entity_id, brightness, kelvin)
             ),
         )
+
+    async def _async_settle_apply(
+        self, entity_id: str, brightness: int, kelvin: int
+    ) -> None:
+        """Turn-on settle delay 后的下发；失败不保留播种值 (P2-2)。
+
+        预期清空后退回"中途入表"语义：下一计划步跳过一次接管判定、
+        拉回一次并重新播种，而不是把下发失败误判成手动调节。
+        """
+        machine = self.machines.get(entity_id)
+        ok = await self._async_process_light(entity_id, brightness, kelvin)
+        if machine is None:
+            return
+        if ok:
+            machine.expected = (brightness, kelvin)
+            machine.applied = (brightness, kelvin)
+            machine.mismatch_steps = 0
+        else:
+            machine.expected = None
 
     async def async_trigger(self, reason: str = "manual") -> None:
         """Run one check-and-set round for all lights (concurrent per light).
@@ -771,8 +870,15 @@ class NightLightManager:
             if machine is not None:
                 # 锚点归位：清除带内接管，预期基准重置为当前时段参数
                 machine.manual_override = False
-                machine.expected = params
-            await self._async_process_light(entity_id, *params)
+                machine.mismatch_steps = 0
+            ok = await self._async_process_light(entity_id, *params)
+            if machine is not None:
+                if ok:
+                    machine.expected = params
+                    machine.applied = params
+                else:
+                    # 失败不保留播种值 (P2-2)，退回中途入表语义
+                    machine.expected = None
 
         results = await asyncio.gather(
             *(_one(entity_id) for entity_id in self.lights),
@@ -903,6 +1009,7 @@ class NightLightManager:
         if state is not None and self._matches(state, *target):
             machine.state = LightState.VERIFIED
             machine.last_error = None
+            machine.applied = target
             _LOGGER.info("%s verified", entity_id)
         else:
             machine.state = LightState.MISMATCH

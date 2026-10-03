@@ -14,7 +14,7 @@
 - 日间模式（可选）：夜间结束后开灯自动应用日间亮度/色温
 - 逐灯覆盖：选灯后为每盏灯单独开关，**只有打开的灯**才出现覆盖配置页，可覆盖夜间/日间/各额外时段的亮度与色温
 - 每日定时触发（固定时间或日落），逐灯检查当前亮度 / 色温
-- 开灯监听：任何选定灯**由关变开**时，自动按当前所处时段应用对应参数（可关闭）
+- 开灯监听：任何选定灯**由关变开**时，自动按当前所处时段应用对应参数（可关闭；关闭后过渡带内开灯的灯由计划步接管判定处理——默认「尊重手动调节」下不会自动拉回曲线）
 - 状态符合预期（在容差范围内）→ 直接跳过，不发送任何服务调用
 - 状态不符 → 下发 `light.turn_on`，延迟后自动验证结果
 - 支持二次编辑（集成条目 → 配置），可改灯具列表与全部参数
@@ -63,7 +63,11 @@ IDLE ──定时触发──▶ PENDING ──┬─ 不可用 ─────�
 
 - 默认实体 `sun.sun`：使用 HA 天文计算，日出日落随季节自动变化
 - 自定义实体：读取实体的 `next_setting` / `next_rising` 属性，实体更新时自动重新调度
-- 来源不可用（实体缺失/属性无效）时自动回退到该锚点的固定时间
+- 来源不可用（实体缺失/属性无效）时先回退 HA 内置天文计算，天文也不可用才回退到该锚点的固定时间
+
+## 已知边界
+
+- 重叠过渡带的边界分钟若不在胜出带步进网格上，该分钟无步进（缝隙 ≤1 个步进间隔，灯按上一目标的原生渐变滑到下一定时点）
 
 ## 安装
 
@@ -128,6 +132,9 @@ IDLE ──定时触发──▶ PENDING ──┬─ 不可用 ─────�
 | 开灯后稳定延迟 | 1s | 0-10s，等灯具上报属性后再检查 |
 | 开灯时自动应用 | 开 | 开灯时按当前时段检查并调整 |
 | 仅调整已开启的灯 | 关 | 开启后关闭的灯不主动开灯 |
+| 尊重手动调节 | 开 | 过渡带内被手动调离预期超容差的灯本带不再干预（首次偏离即停止纠正，连续 2 步判定接管；带入口仍单次判定）；下个锚点归位，关→开重新加入 |
+| 渐变过渡 | 关 | 启用后时间详情页出现过渡时长/步进间隔 |
+| 过渡曲线之外的提示 | — | 过渡带起点必须能解析出生效模式（日间模式开启，或更早的额外时段/夜间锚点），否则该带不生效 |
 
 ### 逐灯覆盖页（仅开关打开的灯）
 
@@ -153,6 +160,26 @@ logger:
 
 ## 更新日志 / Changelog
 
+### 2.1.1（第二/三/四轮复审修复）
+- 修复：接管判定改为**连续 2 步**偏离才生效——单步偏差（回读滞后、灯具色温能力边界）不再被误判成手动调节导致本带冻结  
+  Takeover now requires 2 consecutive mismatched steps — single-step lags or device capability limits no longer freeze the band
+- 修复：开灯 settle 与锚点路径下发失败时清空预期种子，下一步重试而不是误判接管放弃本带  
+  Failed service calls on the settle/anchor paths clear the expected seed so the next step retries
+- 修复：入带判定额外接受「我方最后成功下发的参数」——常亮灯跨时段边界不再被误判接管整段失效  
+  Band-entry check also accepts the last params this integration applied — always-on lights no longer misjudged at period boundaries
+- 修复：重叠过渡带按**窗口包含**去重（与插值路径同构，网格错位不再漏）；from_mode 不可解析的带同样占位；带锚点步与后继带同刻冲突时让位  
+  Overlapping bands deduped by window containment (grid-misalignment proof); from_mode-unresolvable bands still claim their window; a band's anchor step yields to a later band covering it
+- 修复：太阳实体分钟级漂移不再重置带身份（band_key 去掉分钟分量）；关→开与 settle 成功重置连续偏离计数；步进 gather 异常逐条落日志  
+  Sun-entity minute drift no longer resets band identity; rejoin paths reset the mismatch counter; gather exceptions logged per light
+- 修复：**手动调过的灯一次都不被拉回**——带内首次偏离即停止纠正，连续 2 步偏离才判接管（单步滞后自愈不触发；带入口仍单次判定）  
+  A manually adjusted light is never pulled back: the first mismatch only observes, two consecutive mismatches trigger takeover (single-step lags self-heal; band entry stays single-judgment)
+- 修复：重叠过渡带共享锚点分钟时的同刻重复下发（兜底按列表序去重，与时段平局规则一致）  
+  Fixed duplicate same-minute steps when two bands share an anchor minute (list-order dedupe)
+- 修复：自定义太阳实体的 next_* 属性为 datetime/None 时崩溃（entry 加载失败/日循环停摆）  
+  Fixed crash when a custom sun entity exposes datetime/None next_* attributes
+- 测试增至 25 项（真实服务载荷契约、连续计数与首步观测、滞后自愈、settle 失败清种、共享锚点去重、太阳 datetime 属性、句柄不泄漏）  
+  25 tests incl. real service payload contract, consecutive counting with first-step observation, lag self-heal, settle-failure seed clearing, shared-anchor dedupe, sun datetime attribute, handle-leak
+
 ### 2.1.0（过渡引擎重做）
 - **手动干涉尊重**：过渡带内被手动调离预期值的灯立即停止干预（本带内不再拉回），下个锚点归位、关→开重新加入曲线；新选项「尊重手动调节」默认开  
   Manual takeover: a light manually adjusted during a transition is left alone for the rest of the band; it rejoins at the next anchor or on off→on. New option, on by default
@@ -162,8 +189,8 @@ logger:
   Scheduled step points replace interval polling: daily plan, exact wake-ups, zero idle ticks, astronomy out of the hot path
 - **灯具原生渐变**：步进下发带 `transition=步进间隔秒`，消除阶梯感  
   Native light fades between steps (`transition=` parameter)
-- 过渡纯逻辑抽 `schedule.py` + 14 项测试（步进时刻表/插值/带定位/接管语义/带入口/监听清位）  
-  Transition logic extracted to `schedule.py` with 14 tests
+- 过渡纯逻辑抽 `schedule.py` + 18 项测试（步进时刻表/插值/带定位/接管语义/带入口/监听清位）  
+  Transition logic extracted to `schedule.py` with 18 tests
 
 ### 2.0.2
 - 补记 2.0.1（未随版本文档化）：stop() 之后再不调度延迟动作、锚点刷新循环在停止后退出  
