@@ -66,7 +66,11 @@
           "verify_delay": "控制后验证延迟",
           "settle_delay": "开灯后稳定延迟",
           "turn_on_listen": "开灯时自动应用当前时段参数",
-          "only_when_on": "仅调整已开启的灯"
+          "only_when_on": "仅调整已开启的灯",
+          "respect_manual": "尊重手动调节"
+        },
+        "data_description": {
+          "respect_manual": "过渡进行期间，被手动调节过的灯在本过渡带内不再干预；下个锚点归位，关→开也会重新加入曲线。"
         }
       },
       "per_light": {
@@ -172,7 +176,11 @@
           "verify_delay": "控制后验证延迟",
           "settle_delay": "开灯后稳定延迟",
           "turn_on_listen": "开灯时自动应用当前时段参数",
-          "only_when_on": "仅调整已开启的灯"
+          "only_when_on": "仅调整已开启的灯",
+          "respect_manual": "尊重手动调节"
+        },
+        "data_description": {
+          "respect_manual": "过渡进行期间，被手动调节过的灯在本过渡带内不再干预；下个锚点归位，关→开也会重新加入曲线。"
         }
       },
       "per_light": {

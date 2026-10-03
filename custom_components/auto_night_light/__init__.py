@@ -62,7 +62,9 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if key in store:
                     store[key] = _pct(store[key])
             if CONF_TOLERANCE_BRIGHTNESS in store:
-                store[CONF_TOLERANCE_BRIGHTNESS] = _pct(store[CONF_TOLERANCE_BRIGHTNESS])
+                store[CONF_TOLERANCE_BRIGHTNESS] = _pct(
+                    store[CONF_TOLERANCE_BRIGHTNESS]
+                )
             for ovr in store.get(CONF_OVERRIDES, {}).values():
                 for key in (OVR_BRIGHTNESS, OVR_DAY_BRIGHTNESS):
                     if key in ovr:
@@ -90,7 +92,8 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                 "extra_brightness", DEFAULT_EXTRA_BRIGHTNESS
                             ),
                             EXTRA_COLOR_TEMP_KELVIN: store.pop(
-                                "extra_color_temp_kelvin", DEFAULT_EXTRA_COLOR_TEMP_KELVIN
+                                "extra_color_temp_kelvin",
+                                DEFAULT_EXTRA_COLOR_TEMP_KELVIN,
                             ),
                         }
                     ]
@@ -131,9 +134,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             store.setdefault(CONF_START_OFFSET, sunset_offset)
             store.setdefault(CONF_END_OFFSET, sunrise_offset)
     # v5 -> v6：新增过渡字段均有默认值，无需改写数据
-    hass.config_entries.async_update_entry(
-        entry, data=data, options=options, version=6
-    )
+    hass.config_entries.async_update_entry(entry, data=data, options=options, version=6)
     return True
 
 
@@ -165,7 +166,9 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    manager: NightLightManager | None = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+    manager: NightLightManager | None = hass.data.get(DOMAIN, {}).pop(
+        entry.entry_id, None
+    )
     if manager is not None:
         manager.stop()
     if not hass.data.get(DOMAIN):

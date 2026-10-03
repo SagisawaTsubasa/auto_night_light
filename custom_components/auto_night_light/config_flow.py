@@ -45,6 +45,7 @@ from .const import (
     CONF_LIGHTS,
     CONF_ONLY_WHEN_ON,
     CONF_OVERRIDES,
+    CONF_RESPECT_MANUAL,
     CONF_SETTLE_DELAY,
     CONF_START_MODE,
     CONF_START_OFFSET,
@@ -66,6 +67,7 @@ from .const import (
     DEFAULT_EXTRA_BRIGHTNESS,
     DEFAULT_EXTRA_COLOR_TEMP_KELVIN,
     DEFAULT_EXTRA_START,
+    DEFAULT_RESPECT_MANUAL,
     DEFAULT_SETTLE_DELAY,
     DEFAULT_START_OFFSET,
     DEFAULT_SUN_ENTITY,
@@ -95,7 +97,9 @@ from .const import (
 def _pct_selector(key: str, default: int) -> tuple:
     return vol.Required(key, default=default), NumberSelector(
         NumberSelectorConfig(
-            min=1, max=100, unit_of_measurement="%",
+            min=1,
+            max=100,
+            unit_of_measurement="%",
             mode=NumberSelectorMode.SLIDER,
         )
     )
@@ -104,7 +108,10 @@ def _pct_selector(key: str, default: int) -> tuple:
 def _kelvin_selector(key: str, default: int) -> tuple:
     return vol.Required(key, default=default), NumberSelector(
         NumberSelectorConfig(
-            min=1500, max=6500, step=100, unit_of_measurement="K",
+            min=1500,
+            max=6500,
+            step=100,
+            unit_of_measurement="K",
             mode=NumberSelectorMode.SLIDER,
         )
     )
@@ -113,15 +120,22 @@ def _kelvin_selector(key: str, default: int) -> tuple:
 def _offset_selector(key: str, default: int) -> tuple:
     return vol.Required(key, default=default), NumberSelector(
         NumberSelectorConfig(
-            min=-120, max=120, step=5, unit_of_measurement="min",
+            min=-120,
+            max=120,
+            step=5,
+            unit_of_measurement="min",
             mode=NumberSelectorMode.SLIDER,
         )
     )
 
 
 def _add_period_fields(
-    schema: dict, b_key: str, k_key: str, defaults: dict,
-    def_b: int, def_k: int,
+    schema: dict,
+    b_key: str,
+    k_key: str,
+    defaults: dict,
+    def_b: int,
+    def_k: int,
 ) -> None:
     """Add brightness/kelvin fields for one period to a schema dict."""
     b_marker, b_sel = _pct_selector(b_key, defaults.get(b_key, def_b))
@@ -172,7 +186,9 @@ def _time_schema(defaults: dict) -> vol.Schema:
 def _transition_slider(key: str, default: int) -> tuple:
     return vol.Required(key, default=default), NumberSelector(
         NumberSelectorConfig(
-            min=0, max=MAX_TRANSITION_MINUTES, step=5,
+            min=0,
+            max=MAX_TRANSITION_MINUTES,
+            step=5,
             unit_of_measurement="min",
             mode=NumberSelectorMode.SLIDER,
         )
@@ -233,7 +249,9 @@ def _time_details_schema(times: dict, defaults: dict) -> vol.Schema:
             )
         ] = NumberSelector(
             NumberSelectorConfig(
-                min=1, max=15, unit_of_measurement="min",
+                min=1,
+                max=15,
+                unit_of_measurement="min",
                 mode=NumberSelectorMode.SLIDER,
             )
         )
@@ -261,16 +279,18 @@ def _extra_count_schema(defaults: dict) -> vol.Schema:
 def _extra_period_schema(defaults: dict) -> vol.Schema:
     """One extra period: optional name, anchor start time, brightness/kelvin."""
     schema: dict = {
-        vol.Optional(
-            EXTRA_NAME, default=defaults.get(EXTRA_NAME, "")
-        ): TextSelector(),
+        vol.Optional(EXTRA_NAME, default=defaults.get(EXTRA_NAME, "")): TextSelector(),
         vol.Required(
             EXTRA_START, default=defaults.get(EXTRA_START, DEFAULT_EXTRA_START)
         ): TimeSelector(),
     }
     _add_period_fields(
-        schema, EXTRA_BRIGHTNESS, EXTRA_COLOR_TEMP_KELVIN,
-        defaults, DEFAULT_EXTRA_BRIGHTNESS, DEFAULT_EXTRA_COLOR_TEMP_KELVIN,
+        schema,
+        EXTRA_BRIGHTNESS,
+        EXTRA_COLOR_TEMP_KELVIN,
+        defaults,
+        DEFAULT_EXTRA_BRIGHTNESS,
+        DEFAULT_EXTRA_COLOR_TEMP_KELVIN,
     )
     t_marker, t_sel = _transition_slider(
         EXTRA_TRANSITION, defaults.get(EXTRA_TRANSITION, 0)
@@ -285,9 +305,7 @@ def _lights_schema(defaults: dict) -> vol.Schema:
         {
             vol.Required(
                 CONF_LIGHTS, default=defaults.get(CONF_LIGHTS, [])
-            ): EntitySelector(
-                EntitySelectorConfig(domain="light", multiple=True)
-            ),
+            ): EntitySelector(EntitySelectorConfig(domain="light", multiple=True)),
         }
     )
 
@@ -306,22 +324,34 @@ def _settings_schema(defaults: dict, day_enabled: bool) -> vol.Schema:
     """Base period brightness/kelvin plus advanced parameters."""
     schema: dict = {}
     _add_period_fields(
-        schema, CONF_BRIGHTNESS, CONF_COLOR_TEMP_KELVIN,
-        defaults, DEFAULT_BRIGHTNESS, DEFAULT_COLOR_TEMP_KELVIN,
+        schema,
+        CONF_BRIGHTNESS,
+        CONF_COLOR_TEMP_KELVIN,
+        defaults,
+        DEFAULT_BRIGHTNESS,
+        DEFAULT_COLOR_TEMP_KELVIN,
     )
     if day_enabled:
         _add_period_fields(
-            schema, CONF_DAY_BRIGHTNESS, CONF_DAY_COLOR_TEMP_KELVIN,
-            defaults, DEFAULT_DAY_BRIGHTNESS, DEFAULT_DAY_COLOR_TEMP_KELVIN,
+            schema,
+            CONF_DAY_BRIGHTNESS,
+            CONF_DAY_COLOR_TEMP_KELVIN,
+            defaults,
+            DEFAULT_DAY_BRIGHTNESS,
+            DEFAULT_DAY_COLOR_TEMP_KELVIN,
         )
     schema.update(
         {
             vol.Required(
                 CONF_TOLERANCE_BRIGHTNESS,
-                default=defaults.get(CONF_TOLERANCE_BRIGHTNESS, DEFAULT_TOLERANCE_BRIGHTNESS),
+                default=defaults.get(
+                    CONF_TOLERANCE_BRIGHTNESS, DEFAULT_TOLERANCE_BRIGHTNESS
+                ),
             ): NumberSelector(
                 NumberSelectorConfig(
-                    min=0, max=25, unit_of_measurement="%",
+                    min=0,
+                    max=25,
+                    unit_of_measurement="%",
                     mode=NumberSelectorMode.SLIDER,
                 )
             ),
@@ -330,7 +360,10 @@ def _settings_schema(defaults: dict, day_enabled: bool) -> vol.Schema:
                 default=defaults.get(CONF_TOLERANCE_KELVIN, DEFAULT_TOLERANCE_KELVIN),
             ): NumberSelector(
                 NumberSelectorConfig(
-                    min=0, max=1000, step=50, unit_of_measurement="K",
+                    min=0,
+                    max=1000,
+                    step=50,
+                    unit_of_measurement="K",
                     mode=NumberSelectorMode.SLIDER,
                 )
             ),
@@ -339,7 +372,9 @@ def _settings_schema(defaults: dict, day_enabled: bool) -> vol.Schema:
                 default=defaults.get(CONF_VERIFY_DELAY, DEFAULT_VERIFY_DELAY),
             ): NumberSelector(
                 NumberSelectorConfig(
-                    min=0, max=60, unit_of_measurement="s",
+                    min=0,
+                    max=60,
+                    unit_of_measurement="s",
                     mode=NumberSelectorMode.SLIDER,
                 )
             ),
@@ -348,7 +383,10 @@ def _settings_schema(defaults: dict, day_enabled: bool) -> vol.Schema:
                 default=defaults.get(CONF_SETTLE_DELAY, DEFAULT_SETTLE_DELAY),
             ): NumberSelector(
                 NumberSelectorConfig(
-                    min=0, max=10, step=0.5, unit_of_measurement="s",
+                    min=0,
+                    max=10,
+                    step=0.5,
+                    unit_of_measurement="s",
                     mode=NumberSelectorMode.SLIDER,
                 )
             ),
@@ -358,6 +396,10 @@ def _settings_schema(defaults: dict, day_enabled: bool) -> vol.Schema:
             ): BooleanSelector(),
             vol.Required(
                 CONF_ONLY_WHEN_ON, default=defaults.get(CONF_ONLY_WHEN_ON, False)
+            ): BooleanSelector(),
+            vol.Required(
+                CONF_RESPECT_MANUAL,
+                default=defaults.get(CONF_RESPECT_MANUAL, DEFAULT_RESPECT_MANUAL),
             ): BooleanSelector(),
         }
     )
@@ -371,12 +413,18 @@ def _override_schema(
     current = current or {}
     schema: dict = {}
     _add_period_fields(
-        schema, OVR_BRIGHTNESS, OVR_COLOR_TEMP_KELVIN,
-        current, settings[CONF_BRIGHTNESS], settings[CONF_COLOR_TEMP_KELVIN],
+        schema,
+        OVR_BRIGHTNESS,
+        OVR_COLOR_TEMP_KELVIN,
+        current,
+        settings[CONF_BRIGHTNESS],
+        settings[CONF_COLOR_TEMP_KELVIN],
     )
     if day_enabled:
         _add_period_fields(
-            schema, OVR_DAY_BRIGHTNESS, OVR_DAY_COLOR_TEMP_KELVIN,
+            schema,
+            OVR_DAY_BRIGHTNESS,
+            OVR_DAY_COLOR_TEMP_KELVIN,
             current,
             settings.get(CONF_DAY_BRIGHTNESS, DEFAULT_DAY_BRIGHTNESS),
             settings.get(CONF_DAY_COLOR_TEMP_KELVIN, DEFAULT_DAY_COLOR_TEMP_KELVIN),
@@ -391,7 +439,9 @@ def _override_schema(
         if OVR_EXTRA_COLOR_TEMP_KELVIN in cur:
             cur_mapped[f"extra_{i}_kelvin"] = cur[OVR_EXTRA_COLOR_TEMP_KELVIN]
         _add_period_fields(
-            schema, f"extra_{i}_brightness", f"extra_{i}_kelvin",
+            schema,
+            f"extra_{i}_brightness",
+            f"extra_{i}_kelvin",
             cur_mapped,
             extra.get(EXTRA_BRIGHTNESS, DEFAULT_EXTRA_BRIGHTNESS),
             extra.get(EXTRA_COLOR_TEMP_KELVIN, DEFAULT_EXTRA_COLOR_TEMP_KELVIN),

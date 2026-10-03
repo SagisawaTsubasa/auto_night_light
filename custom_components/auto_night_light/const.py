@@ -14,6 +14,7 @@ CONF_EXTRA_ENABLED = "extra_enabled"
 CONF_EXTRA_COUNT = "extra_count"
 CONF_EXTRAS = "extras"
 CONF_TRANSITION_ENABLED = "transition_enabled"
+CONF_RESPECT_MANUAL = "respect_manual"
 CONF_START_TRANSITION = "start_transition"
 CONF_END_TRANSITION = "end_transition"
 CONF_TRANSITION_INTERVAL = "transition_interval"
@@ -52,7 +53,9 @@ OVR_BRIGHTNESS = "brightness"
 OVR_COLOR_TEMP_KELVIN = "color_temp_kelvin"
 OVR_DAY_BRIGHTNESS = "day_brightness"
 OVR_DAY_COLOR_TEMP_KELVIN = "day_color_temp_kelvin"
-OVR_EXTRAS = "extras"  # {时段序号(字符串): {"brightness": int, "color_temp_kelvin": int}}
+OVR_EXTRAS = (
+    "extras"  # {时段序号(字符串): {"brightness": int, "color_temp_kelvin": int}}
+)
 OVR_EXTRA_BRIGHTNESS = "brightness"
 OVR_EXTRA_COLOR_TEMP_KELVIN = "color_temp_kelvin"
 
@@ -73,6 +76,7 @@ DEFAULT_SETTLE_DELAY = 1
 DEFAULT_DAY_BRIGHTNESS = 100
 DEFAULT_DAY_COLOR_TEMP_KELVIN = 4000
 DEFAULT_TRANSITION_INTERVAL = 5
+DEFAULT_RESPECT_MANUAL = True
 MAX_TRANSITION_MINUTES = 120
 
 MODE_NIGHT = "night"
