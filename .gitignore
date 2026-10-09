@@ -17,3 +17,6 @@ htmlcov/
 Thumbs.db
 .idea/
 .vscode/
+
+# ---- 2026-10-09 仓库整理：测试源码移 project-tests ----
+/pyproject.toml
