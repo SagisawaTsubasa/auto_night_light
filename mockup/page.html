@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<!-- auto_night_light 页面 mockup — 观感验证用，真 tokens.css + 静态假数据。 -->
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>夜灯助手 · mockup</title>
+<link rel="stylesheet" href="../custom_components/auto_night_light/static/tokens.css">
+<style>html,body{margin:0;height:100%}</style>
+</head>
+<body>
+<div class="fx-body">
+  <div class="fx-card" data-manager="m1">
+    <h2>自动夜灯</h2>
+    <div class="cx-status">
+      <span class="cx-chip tone-ok"><span class="fx-lamp ok"></span>当前：夜间</span>
+      <span class="cx-chip">下次锚点 10-13 06:30:00</span>
+      <button class="cx-btn primary">立即触发</button>
+    </div>
+    <div class="fx-grid" style="margin-top:12px">
+      <div class="fx-card" data-light="light.bedroom">
+        <h2>light.bedroom</h2>
+        <div class="cx-status">
+          <span class="cx-chip tone-ok"><span class="fx-lamp ok"></span>已验证</span>
+        </div>
+        <div class="cx-status" style="margin-top:8px">
+          <span class="cx-chip">目标 12% / 2700K</span>
+          <span class="cx-chip">已下发 12% / 2700K</span>
+        </div>
+      </div>
+      <div class="fx-card" data-light="light.hallway">
+        <h2>light.hallway</h2>
+        <div class="cx-status">
+          <span class="cx-chip tone-err"><span class="fx-lamp err"></span>偏离</span>
+          <span class="cx-chip tone-warn">手动接管</span>
+          <span class="cx-chip tone-err">连续偏离 2 步</span>
+        </div>
+        <div class="cx-status" style="margin-top:8px">
+          <span class="cx-chip">目标 12% / 2700K</span>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <h2>锚点时刻表</h2>
+      <table class="cx-table">
+        <thead><tr><th>时刻</th><th>时段</th></tr></thead>
+        <tbody>
+          <tr><td class="num">22:00</td><td>夜间</td></tr>
+          <tr><td class="num">06:30</td><td>日间</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</body>
+</html>

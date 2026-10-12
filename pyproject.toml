@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]  # 让 CI 的 pytest 控制台脚本能导入 custom_components 包
+
+[tool.ruff.lint.per-file-ignores]
+# 测试里的 naive datetime 是桩模式约定（manager 按 wall-clock 语义工作）
+"tests/*" = ["DTZ"]

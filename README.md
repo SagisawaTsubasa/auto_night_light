@@ -67,6 +67,8 @@ IDLE ──定时触发──▶ PENDING ──┬─ 不可用 ─────�
 
 ## 已知边界
 
+- 页面注册跟随文羽面板壳的在位状态：**运行期删除壳集成**后，本集成需重载（或重启 HA）才会回落为独立侧边栏面板；**运行期禁用壳**期间页面不可达（等待壳重新启用）。
+
 - 重叠过渡带的边界分钟若不在胜出带步进网格上，该分钟无步进（缝隙 ≤1 个步进间隔，灯按上一目标的原生渐变滑到下一定时点）
 
 ## 安装
@@ -158,7 +160,18 @@ logger:
 
 主程序：Kimi
 
-## 更新日志 / Changelog
+## 更新日志
+
+### 2.2.0（夜灯助手页面）
+- 新增：**夜灯助手页面**——本集成零实体平台，运行状态从此有了可视化面：当前时段与下次锚点、逐灯状态机（九态：等待/监听/待检查/已符合/下发中/已验证/偏离/离线/不接管）、手动接管徽标、连续偏离步数、目标/已下发参数、锚点时刻表、**立即触发**按钮  
+  Added: the **Night Light page** — with zero entity platforms this is the integration's only runtime-visual surface: current band + next anchor, per-light state machines (nine states), manual-override badge, mismatch counters, target/applied parameters, the anchor timetable and a **trigger now** button
+- 页面双形态：安装了 [Fumiha Hub 文羽面板](https://github.com/SagisawaTsubasa/FumihaHub) 时自动汇入其侧边栏壳（徽标 `anl`）；未安装壳时注册为独立侧边栏面板「夜灯助手」——零配置，功能一致  
+  Dual mode: inside the Fumiha Hub shell when present (badge `anl`), or a standalone sidebar panel otherwise — zero config, identical features
+- `static/kit.js`、`static/tokens.css` 为 FumihaHub 同名文件的 vendored 副本（锁步更新）  
+  `static/kit.js` / `static/tokens.css` are vendored copies of FumihaHub's files (keep in lockstep)
+- manifest 新增 `dependencies: [http, frontend]` 与 `after_dependencies: [fumiha_hub]`；CI 新增 pytest job（桩模式测试，无需真 HA）  
+  manifest gains `dependencies` / `after_dependencies`; CI gains a pytest job (stubbed HA)
+ / Changelog
 
 ### 2.1.1（第二/三/四轮复审修复）
 - 修复：接管判定改为**连续 2 步**偏离才生效——单步偏差（回读滞后、灯具色温能力边界）不再被误判成手动调节导致本带冻结  

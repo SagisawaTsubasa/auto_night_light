@@ -38,6 +38,7 @@ from .const import (
     SERVICE_TRIGGER_NOW,
 )
 from .manager import NightLightManager
+from .web import async_setup_web, async_unload_web
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -146,10 +147,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(manager.stop)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
+    await async_setup_web(hass)
+
     if not hass.services.has_service(DOMAIN, SERVICE_TRIGGER_NOW):
 
         async def _handle_trigger_now(call: ServiceCall) -> None:
-            for mgr in hass.data.get(DOMAIN, {}).values():
+            # Snapshot before awaiting: async_trigger awaits light services,
+            # and a concurrent entry unload/setup would mutate the dict
+            # mid-iteration (RuntimeError) — same pattern as lux calibrate.
+            for mgr in list(hass.data.get(DOMAIN, {}).values()):
                 await mgr.async_trigger(reason="service")
 
         hass.services.async_register(
@@ -174,4 +180,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.data.get(DOMAIN):
         hass.services.async_remove(DOMAIN, SERVICE_TRIGGER_NOW)
         hass.data.pop(DOMAIN, None)
+    async_unload_web(hass)
     return True

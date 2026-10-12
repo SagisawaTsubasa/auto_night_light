@@ -1,14 +1,21 @@
 {
   "domain": "auto_night_light",
   "name": "HA Auto Night Light",
+  "after_dependencies": [
+    "fumiha_hub"
+  ],
   "codeowners": [
     "@SagisawaTsubasa"
   ],
   "config_flow": true,
+  "dependencies": [
+    "http",
+    "frontend"
+  ],
   "documentation": "https://github.com/SagisawaTsubasa/auto_night_light",
   "integration_type": "service",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/SagisawaTsubasa/auto_night_light/issues",
   "requirements": [],
-  "version": "2.1.1"
+  "version": "2.2.0"
 }

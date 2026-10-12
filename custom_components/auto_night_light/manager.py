@@ -233,6 +233,8 @@ class NightLightManager:
         self._pending_delays: set = set()
         self._stopped = False
         self._warned_sun_missing: set[str] = set()
+        self._warned_sun_fallback = False
+        self._warned_bad_anchor = False
 
     @property
     def _has_transitions(self) -> bool:
@@ -371,7 +373,11 @@ class NightLightManager:
         try:
             return get_astral_event_date(self.hass, sun_event, date)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Sun event %s unavailable: %s", sun_event, err)
+            # Snapshot view reaches here up to 4×/poll (ANL-F-017): throttle
+            # to first sighting, same as the sun-fallback warning.
+            if not self._warned_sun_fallback:
+                self._warned_sun_fallback = True
+                _LOGGER.warning("Sun event %s unavailable: %s", sun_event, err)
             return None
 
     def _anchor_time(self, mode: str, fixed: str, offset: int):
@@ -425,7 +431,12 @@ class NightLightManager:
                     self.sun_entity,
                 )
                 break
-        _LOGGER.warning("Sun-based start anchor unavailable, using fixed time")
+
+        # Snapshot view polls this every 5s: throttle to first sighting
+        # (same pattern as _sun_dt, ANL-F-004).
+        if not self._warned_sun_fallback:
+            self._warned_sun_fallback = True
+            _LOGGER.warning("Sun-based start anchor unavailable, using fixed time")
         return _fixed_next()
 
     def _schedule_trigger(self) -> None:
@@ -530,6 +541,48 @@ class NightLightManager:
             if best_delta is None or delta < best_delta:
                 best_mode, best_delta = mode, delta
         return best_mode
+
+    def anchor_snapshot(self) -> dict:
+        """Public view-model for the page: anchors, current mode, next anchor.
+
+        Computed in one pass so the snapshot view (which polls every 5s) has
+        a single contract surface instead of reaching into _anchor_modes /
+        _mode_at / _next_start_dt internals (ANL-F-003 — those are private
+        and have been renamed before; README records current_mode() dying as
+        dead code once already).
+
+        next_anchor is the anchor (of ANY kind in _anchor_modes) whose next
+        occurrence is soonest — the night-start-only _next_start_dt is the
+        scheduling trigger and is NOT what the page displays (ANL-F-001).
+        """
+        now = dt_util.now()
+        minutes = now.hour * 60 + now.minute
+        anchors = []
+        next_anchor: datetime | None = None
+        for t, mode in self._anchor_modes():
+            if t is None:
+                # ANL-F-013: an unparseable anchor silently vanishing from
+                # the timetable must be audible at least once — one flag per
+                # manager (the web layer cannot see these anymore).
+                if not self._warned_bad_anchor:
+                    self._warned_bad_anchor = True
+                    _LOGGER.warning(
+                        "夜灯助手存在无法解析的锚点（%s），已从时刻表跳过", mode
+                    )
+                continue
+            anchors.append((t, mode))
+            candidate = now.replace(
+                hour=t.hour, minute=t.minute, second=0, microsecond=0
+            )
+            if candidate <= now:
+                candidate += timedelta(days=1)
+            if next_anchor is None or candidate < next_anchor:
+                next_anchor = candidate
+        return {
+            "anchors": anchors,
+            "current_mode": self._mode_at(minutes),
+            "next_anchor": next_anchor,
+        }
 
     def _transition_bands(self) -> list[tuple]:
         """Return [(anchor_minutes, target_mode, duration_min)] for active bands."""

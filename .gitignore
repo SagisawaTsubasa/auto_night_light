@@ -18,6 +18,5 @@ Thumbs.db
 .idea/
 .vscode/
 
-# ---- 2026-10-09 仓库整理：测试源码移 project-tests ----
-/pyproject.toml
-tests/
+# ---- 2026-10-13：tests/pyproject 随页面批次回归仓库（CI 跑 pytest）----
+.backup-pre-*/

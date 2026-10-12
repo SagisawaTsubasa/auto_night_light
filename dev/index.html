@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<!-- auto_night_light dev harness — REAL shell + REAL page over mockHass.
+  ?dark=1 ?failapi=1 ?badmodule=1 ?standalone=1  (same semantics as lux) -->
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>auto_night_light dev harness</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  fumiha-hub-panel { display: block; height: 100%; }
+  .fx-dialog { border: 1px solid var(--fx-edge); border-radius: 10px; padding: 16px 18px; background: var(--fx-panel); color: var(--fx-txt); min-width: 280px; max-width: 90vw; }
+  .fx-dialog::backdrop { background: rgba(0,0,0,.35); }
+</style>
+</head>
+<body>
+<fumiha-hub-panel id="hub"></fumiha-hub-panel>
+<script type="module" src="/fumiha_hub/fumiha-hub.js"></script>
+<script>
+  var params = new URLSearchParams(location.search);
+  if (params.has("dark")) {
+    var darkVars = {
+      "primary-background-color": "#111111", "card-background-color": "#1c1c1c",
+      "secondary-background-color": "#282828", "divider-color": "#333333",
+      "primary-text-color": "#e1e1e1", "secondary-text-color": "#9b9b9b",
+      "primary-color": "#03a9f4", "success-color": "#43a047",
+      "warning-color": "#ffb300", "error-color": "#ff5252",
+    };
+    Object.keys(darkVars).forEach(function (k) {
+      document.documentElement.style.setProperty("--" + k, darkVars[k]);
+    });
+  }
+  var pageModule = params.has("badmodule")
+    ? "/auto_night_light/missing-page.js?ver=2.2.0"
+    : "/auto_night_light/page.js?ver=2.2.0";
+  var failApi = params.has("failapi");
+  var calls = [];
+  window.__serviceCalls = calls;
+
+  function snapshot() {
+    return {
+      managers: [{
+        entry_id: "m1",
+        title: "自动夜灯",
+        current_mode: "night",
+        next_anchor: "2026-10-13T06:30:00+08:00",
+        anchors: [
+          { time: "18:00", mode: "extra_0" },
+          { time: "22:00", mode: "night" },
+          { time: "06:30", mode: "day" },
+        ],
+        lights: [
+          { entity_id: "light.bedroom", state: "verified", manual_override: false,
+            mismatch_steps: 0, target: [12, 2700], applied: [12, 2700], last_error: null },
+          { entity_id: "light.hallway", state: "mismatch", manual_override: true,
+            mismatch_steps: 2, target: [12, 2700], applied: null, last_error: null },
+          { entity_id: "light.attic", state: "offline", manual_override: false,
+            mismatch_steps: 0, target: null, applied: null, last_error: "灯实体不可用" },
+        ],
+        start_mode: "sunset", end_mode: "sunrise",
+        transition_enabled: false, day_enabled: true, respect_manual: true,
+      }],
+    };
+  }
+
+  var mockHass = {
+    language: "zh-Hans",
+    themes: { darkMode: params.has("dark") },
+    callService: async function (domain, service, data) {
+      calls.push({ domain: domain, service: service, data: data });
+    },
+    fetchWithAuth: async function (path) {
+      if (failApi && path.indexOf("/api/auto_night_light/snapshot") === 0) {
+        return new Response(JSON.stringify({ error: "simulated failure" }), { status: 500 });
+      }
+      if (path.indexOf("/api/fumiha_hub/panels") === 0) {
+        return new Response(JSON.stringify({
+          dir_rev: 3,
+          panels: [{
+            id: "anl.main", title: "夜灯助手", icon: "mdi:weather-night",
+            order: 20, version: "2.2.0", module_url: pageModule, element: "anl-page",
+          }],
+        }), { status: 200 });
+      }
+      if (path.indexOf("/api/auto_night_light/snapshot") === 0) {
+        return new Response(JSON.stringify(snapshot()), { status: 200 });
+      }
+      return new Response(JSON.stringify({ error: "no route: " + path }), { status: 404 });
+    },
+  };
+  window.__mockHass = mockHass;
+
+  var panel = document.getElementById("hub");
+  if (params.has("standalone")) {
+    panel.remove();
+    var page = document.createElement("anl-page");
+    page.id = "page";
+    document.body.appendChild(page);
+    import("/auto_night_light/page.js?ver=2.2.0").then(function () {
+      page.hass = mockHass;
+    });
+  } else {
+    customElements.whenDefined("fumiha-hub-panel").then(function () {
+      panel.hass = mockHass;
+    });
+  }
+</script>
+</body>
+</html>
