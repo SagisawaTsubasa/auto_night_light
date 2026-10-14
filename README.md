@@ -1,3 +1,5 @@
+> ⚠ **本集成已退役（2026-10-14）**：功能已合并进 [FumihaLighting 文羽照明](https://github.com/SagisawaTsubasa/FumihaLighting)（夜灯组条目），本仓归档停止维护。迁移方式见 FumihaLighting README「从旧集成迁移」。
+
 # HA Auto Night Light（自动夜灯）
 
 在设定时间自动将选定灯具切换到指定的色温与亮度；每盏灯有独立状态机，当前状态已符合预期时跳过控制，最大限度减少服务调用次数。Automatically switch selected lights to a target color temperature and brightness at a set time, with a per-light state machine that skips lights already matching the target.
